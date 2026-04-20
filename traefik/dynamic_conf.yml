@@ -1,0 +1,88 @@
+http:
+  routers:
+    auth-service:
+      rule: "PathPrefix(`/auth`) || PathPrefix(`/users`) || PathPrefix(`/admin`) || PathPrefix(`/swagger-ui`) || PathPrefix(`/v3/api-docs`) || Path(`/v3/api-docs.yaml`)"
+      entryPoints:
+        - http
+      service: auth-service
+      middlewares:
+        - auth-service-chain
+
+    dashboard:
+      rule: "Host(`traefik.localhost`) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))"
+      entryPoints:
+        - traefik
+      service: api@internal
+      middlewares:
+        - dashboard-auth
+
+  services:
+    auth-service:
+      loadBalancer:
+        servers:
+          - url: "http://auth-service:8080"
+        passHostHeader: true
+
+  middlewares:
+    dashboard-auth:
+      basicAuth:
+        users:
+          - "admin:$apr1$0BvvoY/i$Ze.R8quKQg9tifMlDjlwM/"
+        removeHeader: true
+
+    cors-headers:
+      headers:
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - PATCH
+          - OPTIONS
+        accessControlAllowHeaders:
+          - Authorization
+          - Content-Type
+          - X-Requested-With
+        accessControlAllowCredentials: true
+        accessControlAllowOriginList:
+          - "*"
+        accessControlMaxAge: 100
+
+    rate-limit:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 60s
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+
+    request-headers:
+      headers:
+        customRequestHeaders:
+          X-Gateway: "Fleet-Manager-Traefik"
+          X-Service-Version: "1.0"
+        customResponseHeaders:
+          X-Frame-Options: "SAMEORIGIN"
+          X-Content-Type-Options: "nosniff"
+          X-XSS-Protection: "1; mode=block"
+
+    retry:
+      retry:
+        attempts: 3
+        initialInterval: 100ms
+
+    compression:
+      compress:
+        minResponseBodyBytes: 1000
+        excludedContentTypes:
+          - text/event-stream
+
+    auth-service-chain:
+      chain:
+        middlewares:
+          - rate-limit
+          - cors-headers
+          - request-headers
+          - compression
+          - retry

@@ -1,0 +1,107 @@
+services:
+  # Traefik API Gateway
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - fleet-net
+    ports:
+      - "80:80"
+      - "8081:8080" # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/traefik.yml:ro
+      - ./traefik/dynamic_conf.yml:/dynamic_conf.yml:ro
+
+  # Auth Service from auth-service directory
+  auth-postgres:
+    image: postgres:16-alpine
+    container_name: auth-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: auth_deploy
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - auth-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d auth_deploy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - fleet-net
+    ports:
+      - "5432:5432"
+    expose:
+      - "5432"
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    image: fleet/auth-service:local
+    container_name: auth-service
+    restart: unless-stopped
+    depends_on:
+      auth-postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      JWT_SECRET: "96394670290123498739012349851901"
+      BOOTSTRAP_ADMIN_USERNAME: admin
+      BOOTSTRAP_ADMIN_EMAIL: admin@example.com
+      BOOTSTRAP_ADMIN_PASSWORD: admin123
+    networks:
+      - fleet-net
+    expose:
+      - "8080"
+
+  # Placeholder for Fleet Service (uncomment and configure when ready)
+  # fleet-service:
+  #   build:
+  #     context: ./fleet-service
+  #     dockerfile: Dockerfile
+  #   image: fleet/fleet-service:local
+  #   container_name: fleet-service
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - auth-service
+  #   environment:
+  #     SPRING_PROFILES_ACTIVE: docker
+  #     JWT_SECRET: ${JWT_SECRET}
+  #     AUTH_SERVICE_URL: http://auth-service:8080
+  #   networks:
+  #     - fleet-net
+  #   expose:
+  #     - "8080"
+
+  # Placeholder for Document Service (uncomment and configure when ready)
+  # document-service:
+  #   build:
+  #     context: ./document-service
+  #     dockerfile: Dockerfile
+  #   image: fleet/document-service:local
+  #   container_name: document-service
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - auth-service
+  #   environment:
+  #     SPRING_PROFILES_ACTIVE: docker
+  #     JWT_SECRET: ${JWT_SECRET}
+  #     AUTH_SERVICE_URL: http://auth-service:8080
+  #   networks:
+  #     - fleet-net
+  #   expose:
+  #     - "8080"
+
+volumes:
+  auth-postgres-data:
+
+networks:
+  fleet-net:
+    driver: bridge
