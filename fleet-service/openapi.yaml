@@ -1,0 +1,1001 @@
+openapi: 3.0.1
+info:
+  title: Fleet Manager Fleet Service API
+  description: Vehicle registry APIs for Fleet Manager.
+  contact:
+    name: Fleet Manager Team
+  version: 1.0.0
+servers:
+- url: /api/fleet
+  description: Fleet service through Traefik
+tags:
+- name: Vehicles
+  description: Vehicle registry endpoints.
+- name: Internal Vehicles
+  description: Internal vehicle lookup endpoints.
+paths:
+  /vehicles/{id}:
+    get:
+      tags:
+      - Vehicles
+      summary: Get vehicle by id
+      description: Returns one vehicle by id. Employee/User roles can access only
+        vehicles assigned to their user id.
+      operationId: getById
+      parameters:
+      - name: id
+        in: path
+        description: Vehicle id.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      responses:
+        "404":
+          description: Vehicle was not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "200":
+          description: Vehicle returned
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+              example:
+                id: 1
+                licensePlate: B-123-ABC
+                vin: 1HGCM82633A004352
+                brand: Toyota
+                model: Corolla
+                manufactureYear: 2022
+                vehicleType: CAR
+                fuelType: HYBRID
+                ownershipType: OWNED
+                status: ACTIVE
+                department: Operations
+                assignedUserId: 12
+                assignedDriverName: Alex Ionescu
+                currentMileage: 25000
+                createdAt: 2026-05-04T11:30:00Z
+                updatedAt: 2026-05-04T11:45:00Z
+        "403":
+          description: Role or assignment does not allow reading this vehicle
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "401":
+          description: JWT token is missing or invalid
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+      security:
+      - bearerAuth: []
+    put:
+      tags:
+      - Vehicles
+      summary: Update vehicle
+      description: Replaces editable vehicle fields with the supplied payload. Requires
+        `ADMIN` or `FLEET_MANAGER`.
+      operationId: update
+      parameters:
+      - name: id
+        in: path
+        description: Vehicle id.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      requestBody:
+        description: Replacement vehicle data.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VehicleRequest"
+            example:
+              licensePlate: B-123-ABC
+              vin: 1HGCM82633A004352
+              brand: Toyota
+              model: Corolla
+              manufactureYear: 2022
+              vehicleType: CAR
+              fuelType: HYBRID
+              ownershipType: OWNED
+              status: ACTIVE
+              department: Operations
+              assignedUserId: 12
+              assignedDriverName: Alex Ionescu
+              currentMileage: 25000
+        required: true
+      responses:
+        "409":
+          description: License plate or VIN already exists
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "403":
+          description: Role is not allowed to update vehicles
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "404":
+          description: Vehicle was not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "401":
+          description: JWT token is missing or invalid
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "200":
+          description: Vehicle updated
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+              example:
+                id: 1
+                licensePlate: B-123-ABC
+                vin: 1HGCM82633A004352
+                brand: Toyota
+                model: Corolla
+                manufactureYear: 2022
+                vehicleType: CAR
+                fuelType: HYBRID
+                ownershipType: OWNED
+                status: ACTIVE
+                department: Operations
+                assignedUserId: 12
+                assignedDriverName: Alex Ionescu
+                currentMileage: 25000
+                createdAt: 2026-05-04T11:30:00Z
+                updatedAt: 2026-05-04T11:45:00Z
+        "400":
+          description: Validation failed or invalid enum value
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+      security:
+      - bearerAuth: []
+    delete:
+      tags:
+      - Vehicles
+      summary: Delete vehicle
+      description: Deletes a vehicle registry record. Requires `ADMIN`.
+      operationId: delete
+      parameters:
+      - name: id
+        in: path
+        description: Vehicle id.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      responses:
+        "204":
+          description: Vehicle deleted
+        "404":
+          description: Vehicle was not found
+        "401":
+          description: JWT token is missing or invalid
+        "403":
+          description: Role is not allowed to delete vehicles
+      security:
+      - bearerAuth: []
+  /vehicles:
+    get:
+      tags:
+      - Vehicles
+      summary: List vehicles
+      description: "Returns vehicles visible to the authenticated user. Admin, fleet\
+        \ manager, and auditor roles can read all vehicles. Employee/User roles only\
+        \ see assigned vehicles when the JWT contains a numeric user id."
+      operationId: list
+      parameters:
+      - name: status
+        in: query
+        description: Filter by operational status.
+        required: false
+        schema:
+          type: string
+          enum:
+          - ACTIVE
+          - IN_SERVICE
+          - INACTIVE
+          - SOLD
+          - DECOMMISSIONED
+        example: ACTIVE
+      - name: vehicleType
+        in: query
+        description: Filter by vehicle category.
+        required: false
+        schema:
+          type: string
+          enum:
+          - CAR
+          - VAN
+          - TRUCK
+          - MOTORCYCLE
+          - OTHER
+        example: CAR
+      - name: fuelType
+        in: query
+        description: Filter by fuel or powertrain type.
+        required: false
+        schema:
+          type: string
+          enum:
+          - DIESEL
+          - PETROL
+          - HYBRID
+          - ELECTRIC
+          - LPG
+          - OTHER
+        example: HYBRID
+      - name: ownershipType
+        in: query
+        description: Filter by ownership model.
+        required: false
+        schema:
+          type: string
+          enum:
+          - OWNED
+          - LEASED
+          - RENTED
+          - OTHER
+        example: OWNED
+      - name: department
+        in: query
+        description: Filter by responsible department.
+        required: false
+        schema:
+          type: string
+        example: Operations
+      - name: assignedUserId
+        in: query
+        description: Filter by assigned application user id.
+        required: false
+        schema:
+          type: integer
+          format: int64
+        example: 12
+      - name: licensePlate
+        in: query
+        description: Filter by exact license plate.
+        required: false
+        schema:
+          type: string
+        example: B-123-ABC
+      responses:
+        "200":
+          description: Vehicles returned
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VehicleResponse"
+              example:
+              - id: 1
+                licensePlate: B-123-ABC
+                vin: 1HGCM82633A004352
+                brand: Toyota
+                model: Corolla
+                manufactureYear: 2022
+                vehicleType: CAR
+                fuelType: HYBRID
+                ownershipType: OWNED
+                status: ACTIVE
+                department: Operations
+                assignedUserId: 12
+                assignedDriverName: Alex Ionescu
+                currentMileage: 25000
+                createdAt: 2026-05-04T11:30:00Z
+                updatedAt: 2026-05-04T11:45:00Z
+        "400":
+          description: Invalid filter value
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VehicleResponse"
+        "401":
+          description: JWT token is missing or invalid
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VehicleResponse"
+        "403":
+          description: Role is not allowed to list vehicles
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VehicleResponse"
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Vehicles
+      summary: Create vehicle
+      description: Creates a vehicle registry record. `licensePlate` is required and
+        must be unique. `status` defaults to `ACTIVE` when omitted. Requires `ADMIN`
+        or `FLEET_MANAGER`.
+      operationId: create
+      requestBody:
+        description: Vehicle data to create.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VehicleRequest"
+            example:
+              licensePlate: B-123-ABC
+              vin: 1HGCM82633A004352
+              brand: Toyota
+              model: Corolla
+              manufactureYear: 2022
+              vehicleType: CAR
+              fuelType: HYBRID
+              ownershipType: OWNED
+              status: ACTIVE
+              department: Operations
+              assignedUserId: 12
+              assignedDriverName: Alex Ionescu
+              currentMileage: 25000
+        required: true
+      responses:
+        "409":
+          description: License plate or VIN already exists
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "403":
+          description: Role is not allowed to create vehicles
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "201":
+          description: Vehicle created
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+              example:
+                id: 1
+                licensePlate: B-123-ABC
+                vin: 1HGCM82633A004352
+                brand: Toyota
+                model: Corolla
+                manufactureYear: 2022
+                vehicleType: CAR
+                fuelType: HYBRID
+                ownershipType: OWNED
+                status: ACTIVE
+                department: Operations
+                assignedUserId: 12
+                assignedDriverName: Alex Ionescu
+                currentMileage: 25000
+                createdAt: 2026-05-04T11:30:00Z
+                updatedAt: 2026-05-04T11:45:00Z
+        "401":
+          description: JWT token is missing or invalid
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "400":
+          description: Validation failed or invalid enum value
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+      security:
+      - bearerAuth: []
+  /vehicles/{id}/status:
+    patch:
+      tags:
+      - Vehicles
+      summary: Change vehicle status
+      description: Updates only the operational status of a vehicle. Requires `ADMIN`
+        or `FLEET_MANAGER`.
+      operationId: changeStatus
+      parameters:
+      - name: id
+        in: path
+        description: Vehicle id.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      requestBody:
+        description: New vehicle status.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VehicleStatusRequest"
+            example:
+              status: IN_SERVICE
+        required: true
+      responses:
+        "400":
+          description: Validation failed or invalid status
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "404":
+          description: Vehicle was not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "200":
+          description: Vehicle status changed
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+              example:
+                id: 1
+                licensePlate: B-123-ABC
+                vin: 1HGCM82633A004352
+                brand: Toyota
+                model: Corolla
+                manufactureYear: 2022
+                vehicleType: CAR
+                fuelType: HYBRID
+                ownershipType: OWNED
+                status: ACTIVE
+                department: Operations
+                assignedUserId: 12
+                assignedDriverName: Alex Ionescu
+                currentMileage: 25000
+                createdAt: 2026-05-04T11:30:00Z
+                updatedAt: 2026-05-04T11:45:00Z
+        "403":
+          description: Role is not allowed to change vehicle status
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "401":
+          description: JWT token is missing or invalid
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+      security:
+      - bearerAuth: []
+  /vehicles/{id}/assignment:
+    patch:
+      tags:
+      - Vehicles
+      summary: Assign vehicle
+      description: "Updates the user, driver name, and department assignment for a\
+        \ vehicle. Requires `ADMIN` or `FLEET_MANAGER`."
+      operationId: assign
+      parameters:
+      - name: id
+        in: path
+        description: Vehicle id.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      requestBody:
+        description: Assignment details. Nullable fields can be used to clear existing
+          assignment data.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VehicleAssignmentRequest"
+            example:
+              assignedUserId: 12
+              assignedDriverName: Alex Ionescu
+              department: Operations
+        required: true
+      responses:
+        "404":
+          description: Vehicle was not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "403":
+          description: Role is not allowed to assign vehicles
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "200":
+          description: Vehicle assignment changed
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+              example:
+                id: 1
+                licensePlate: B-123-ABC
+                vin: 1HGCM82633A004352
+                brand: Toyota
+                model: Corolla
+                manufactureYear: 2022
+                vehicleType: CAR
+                fuelType: HYBRID
+                ownershipType: OWNED
+                status: ACTIVE
+                department: Operations
+                assignedUserId: 12
+                assignedDriverName: Alex Ionescu
+                currentMileage: 25000
+                createdAt: 2026-05-04T11:30:00Z
+                updatedAt: 2026-05-04T11:45:00Z
+        "401":
+          description: JWT token is missing or invalid
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "400":
+          description: Validation failed
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+      security:
+      - bearerAuth: []
+  /internal/vehicles/{id}/exists:
+    get:
+      tags:
+      - Internal Vehicles
+      summary: Check vehicle existence
+      description: "Internal lookup used by other services to check whether a vehicle\
+        \ id exists. Requires `ADMIN`, `FLEET_MANAGER`, or `AUDITOR`."
+      operationId: exists
+      parameters:
+      - name: id
+        in: path
+        description: Vehicle id to check.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      responses:
+        "200":
+          description: Existence result returned
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleExistsResponse"
+              example:
+                id: 1
+                exists: true
+        "403":
+          description: Role is not allowed to use internal vehicle lookups
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleExistsResponse"
+        "401":
+          description: JWT token is missing or invalid
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleExistsResponse"
+      security:
+      - bearerAuth: []
+  /internal/vehicles/{id}/basic-info:
+    get:
+      tags:
+      - Internal Vehicles
+      summary: Get vehicle basic info
+      description: "Internal lookup that returns a compact vehicle representation\
+        \ for cross-service validation or display. Requires `ADMIN`, `FLEET_MANAGER`,\
+        \ or `AUDITOR`."
+      operationId: basicInfo
+      parameters:
+      - name: id
+        in: path
+        description: Vehicle id.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      responses:
+        "200":
+          description: Basic vehicle info returned
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleBasicInfoResponse"
+              example:
+                id: 1
+                licensePlate: B-123-ABC
+                brand: Toyota
+                model: Corolla
+                status: ACTIVE
+                assignedUserId: 12
+                assignedDriverName: Alex Ionescu
+        "404":
+          description: Vehicle was not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleBasicInfoResponse"
+        "403":
+          description: Role is not allowed to use internal vehicle lookups
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleBasicInfoResponse"
+        "401":
+          description: JWT token is missing or invalid
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleBasicInfoResponse"
+      security:
+      - bearerAuth: []
+  /internal/vehicles/active:
+    get:
+      tags:
+      - Internal Vehicles
+      summary: List active vehicles
+      description: "Internal lookup that returns compact records for vehicles with\
+        \ `ACTIVE` status. Requires `ADMIN`, `FLEET_MANAGER`, or `AUDITOR`."
+      operationId: activeVehicles
+      responses:
+        "403":
+          description: Role is not allowed to use internal vehicle lookups
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VehicleBasicInfoResponse"
+        "401":
+          description: JWT token is missing or invalid
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VehicleBasicInfoResponse"
+        "200":
+          description: Active vehicles returned
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VehicleBasicInfoResponse"
+              example:
+              - id: 1
+                licensePlate: B-123-ABC
+                brand: Toyota
+                model: Corolla
+                status: ACTIVE
+                assignedUserId: 12
+                assignedDriverName: Alex Ionescu
+      security:
+      - bearerAuth: []
+components:
+  schemas:
+    VehicleRequest:
+      required:
+      - brand
+      - licensePlate
+      - model
+      type: object
+      properties:
+        licensePlate:
+          maxLength: 32
+          minLength: 0
+          type: string
+          description: Unique vehicle license plate.
+          example: B-123-ABC
+        vin:
+          maxLength: 64
+          minLength: 0
+          type: string
+          description: "Vehicle identification number. Optional, but unique when provided."
+          example: 1HGCM82633A004352
+        brand:
+          maxLength: 80
+          minLength: 0
+          type: string
+          description: Vehicle brand or manufacturer.
+          example: Toyota
+        model:
+          maxLength: 80
+          minLength: 0
+          type: string
+          description: Vehicle model.
+          example: Corolla
+        manufactureYear:
+          minimum: 1886
+          type: integer
+          description: Manufacture year.
+          format: int32
+          example: 2022
+        vehicleType:
+          type: string
+          description: Operational vehicle category.
+          example: CAR
+          enum:
+          - CAR
+          - VAN
+          - TRUCK
+          - MOTORCYCLE
+          - OTHER
+        fuelType:
+          type: string
+          description: Fuel or powertrain type.
+          example: HYBRID
+          enum:
+          - DIESEL
+          - PETROL
+          - HYBRID
+          - ELECTRIC
+          - LPG
+          - OTHER
+        ownershipType:
+          type: string
+          description: Ownership model used by the company.
+          example: OWNED
+          enum:
+          - OWNED
+          - LEASED
+          - RENTED
+          - OTHER
+        status:
+          type: string
+          description: Current operational status. Defaults to ACTIVE when omitted
+            on create.
+          example: ACTIVE
+          enum:
+          - ACTIVE
+          - IN_SERVICE
+          - INACTIVE
+          - SOLD
+          - DECOMMISSIONED
+        department:
+          maxLength: 120
+          minLength: 0
+          type: string
+          description: Department currently responsible for the vehicle.
+          example: Operations
+        assignedUserId:
+          type: integer
+          description: Application user id assigned to the vehicle.
+          format: int64
+          example: 12
+        assignedDriverName:
+          maxLength: 160
+          minLength: 0
+          type: string
+          description: Human-readable assigned driver name.
+          example: Alex Ionescu
+        currentMileage:
+          minimum: 0
+          type: integer
+          description: Current odometer value.
+          format: int64
+          example: 25000
+      description: Payload used to create or replace a vehicle in the fleet registry.
+    VehicleResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Vehicle id.
+          format: int64
+          example: 1
+        licensePlate:
+          type: string
+          description: Unique vehicle license plate.
+          example: B-123-ABC
+        vin:
+          type: string
+          description: Vehicle identification number.
+          example: 1HGCM82633A004352
+        brand:
+          type: string
+          description: Vehicle brand or manufacturer.
+          example: Toyota
+        model:
+          type: string
+          description: Vehicle model.
+          example: Corolla
+        manufactureYear:
+          type: integer
+          description: Manufacture year.
+          format: int32
+          example: 2022
+        vehicleType:
+          type: string
+          description: Operational vehicle category.
+          example: CAR
+          enum:
+          - CAR
+          - VAN
+          - TRUCK
+          - MOTORCYCLE
+          - OTHER
+        fuelType:
+          type: string
+          description: Fuel or powertrain type.
+          example: HYBRID
+          enum:
+          - DIESEL
+          - PETROL
+          - HYBRID
+          - ELECTRIC
+          - LPG
+          - OTHER
+        ownershipType:
+          type: string
+          description: Ownership model used by the company.
+          example: OWNED
+          enum:
+          - OWNED
+          - LEASED
+          - RENTED
+          - OTHER
+        status:
+          type: string
+          description: Current operational status.
+          example: ACTIVE
+          enum:
+          - ACTIVE
+          - IN_SERVICE
+          - INACTIVE
+          - SOLD
+          - DECOMMISSIONED
+        department:
+          type: string
+          description: Department currently responsible for the vehicle.
+          example: Operations
+        assignedUserId:
+          type: integer
+          description: Application user id assigned to the vehicle.
+          format: int64
+          example: 12
+        assignedDriverName:
+          type: string
+          description: Human-readable assigned driver name.
+          example: Alex Ionescu
+        currentMileage:
+          type: integer
+          description: Current odometer value.
+          format: int64
+          example: 25000
+        createdAt:
+          type: string
+          description: Creation timestamp.
+          format: date-time
+          example: 2026-05-04T11:30:00Z
+        updatedAt:
+          type: string
+          description: Last update timestamp.
+          format: date-time
+          example: 2026-05-04T11:45:00Z
+      description: Vehicle record returned by Fleet Service.
+    VehicleStatusRequest:
+      required:
+      - status
+      type: object
+      properties:
+        status:
+          type: string
+          description: New vehicle status.
+          example: IN_SERVICE
+          enum:
+          - ACTIVE
+          - IN_SERVICE
+          - INACTIVE
+          - SOLD
+          - DECOMMISSIONED
+      description: Payload used to change a vehicle status.
+    VehicleAssignmentRequest:
+      type: object
+      properties:
+        assignedUserId:
+          type: integer
+          description: Application user id assigned to the vehicle. Send null to clear
+            it.
+          format: int64
+          example: 12
+        assignedDriverName:
+          maxLength: 160
+          minLength: 0
+          type: string
+          description: Human-readable assigned driver name. Send null to clear it.
+          example: Alex Ionescu
+        department:
+          maxLength: 120
+          minLength: 0
+          type: string
+          description: Department responsible for the vehicle after assignment.
+          example: Operations
+      description: Payload used to assign or reassign a vehicle.
+    VehicleExistsResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Vehicle id that was checked.
+          format: int64
+          example: 1
+        exists:
+          type: boolean
+          description: Whether the vehicle exists.
+          example: true
+      description: Vehicle existence response for internal service-to-service lookups.
+    VehicleBasicInfoResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Vehicle id.
+          format: int64
+          example: 1
+        licensePlate:
+          type: string
+          description: Unique vehicle license plate.
+          example: B-123-ABC
+        brand:
+          type: string
+          description: Vehicle brand or manufacturer.
+          example: Toyota
+        model:
+          type: string
+          description: Vehicle model.
+          example: Corolla
+        status:
+          type: string
+          description: Current operational status.
+          example: ACTIVE
+          enum:
+          - ACTIVE
+          - IN_SERVICE
+          - INACTIVE
+          - SOLD
+          - DECOMMISSIONED
+        assignedUserId:
+          type: integer
+          description: Application user id assigned to the vehicle.
+          format: int64
+          example: 12
+        assignedDriverName:
+          type: string
+          description: Human-readable assigned driver name.
+          example: Alex Ionescu
+      description: Reduced vehicle view for internal service-to-service lookups.
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

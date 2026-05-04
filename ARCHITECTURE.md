@@ -260,8 +260,8 @@ LOCAL DEVELOPMENT:
 │     ├─ Container: traefik
 │     ├─ Container: auth-service
 │     ├─ Container: auth-postgres
-│     ├─ Container: fleet-service (future)
-│     ├─ Container: fleet-database (future)
+│     ├─ Container: fleet-service
+│     ├─ Container: fleet-postgres
 │     ├─ Container: document-service (future)
 │     └─ Container: document-database (future)
 │
@@ -331,7 +331,7 @@ fleet manager/
 │  │
 │  └─ (docker-compose.yml was moved to root)
 │
-├─ Fleet Service (Future)
+├─ Fleet Service
 │  └─ fleet-service/
 │     ├─ Dockerfile
 │     ├─ pom.xml
@@ -351,3 +351,14 @@ fleet manager/
 **Generated on**: April 18, 2026  
 **Version**: 1.0.0  
 **Status**: Ready for Use
+
+## Fleet Service Status
+
+Fleet Service is now implemented as a Spring Boot microservice under `fleet-service/`.
+
+- Gateway route: `/api/fleet/**`
+- Service-local routes: `/vehicles/**` and `/internal/vehicles/**`
+- Database: dedicated PostgreSQL container `fleet-postgres` with database `fleet_deploy`
+- Persistence style: follows the existing project convention with Spring Data JPA and `ddl-auto=update`
+- Security: validates the same shared JWT secret as Auth Service, accepting both `roles` and the existing `role` claim
+- Scope: vehicle registry data only; documents, parsing, compliance, and notifications remain outside this service

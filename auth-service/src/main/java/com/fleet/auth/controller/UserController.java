@@ -12,6 +12,7 @@ import com.fleet.auth.service.CredentialDetails;
 import com.fleet.auth.service.UserInfoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.Hidden;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -42,7 +43,7 @@ public class UserController {
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
 
-    @PostMapping("/auth/register")
+    @PostMapping("/register")
     @Operation(summary = "Register a user", description = "Creates a new account with USER role.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "User registered", content = @Content(schema = @Schema(implementation = MeResponse.class))),
@@ -54,7 +55,13 @@ public class UserController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @PostMapping("/auth/login")
+    @Hidden
+    @PostMapping("/auth/register")
+    public ResponseEntity<MeResponse> legacyRegister(@Valid @RequestBody RegisterRequest registerRequest) {
+        return register(registerRequest);
+    }
+
+    @PostMapping("/login")
     @Operation(summary = "Login", description = "Authenticates with username/password and returns a JWT token.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Login successful", content = @Content(schema = @Schema(implementation = AuthResponse.class))),
@@ -71,6 +78,12 @@ public class UserController {
                 ? credentialDetails.getRole()
                 : Role.fromAuthorities(userDetails.getAuthorities()).stream().findFirst().orElseThrow();
         return ResponseEntity.ok(new AuthResponse(token, userDetails.getUsername(), role));
+    }
+
+    @Hidden
+    @PostMapping("/auth/login")
+    public ResponseEntity<AuthResponse> legacyLogin(@Valid @RequestBody LoginRequest loginRequest) {
+        return login(loginRequest);
     }
 
     @GetMapping("/users/me")

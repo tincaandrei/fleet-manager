@@ -22,6 +22,10 @@ public class CredentialDetails implements UserDetails {
         return credential.getRole().getRoleName();
     }
 
+    public Long getUserId() {
+        return credential.getUserData() == null ? null : credential.getUserData().getUserId();
+    }
+
     @Override
     public String getPassword() {
         return credential.getPasswordHash();

@@ -2,256 +2,294 @@ openapi: 3.0.1
 info:
   title: Fleet Manager Auth Service API
   description: JWT authentication and user role management APIs for Fleet Manager.
+  contact:
+    name: Fleet Manager Team
   version: 1.0.0
 servers:
-  - url: http://localhost
-    description: Traefik gateway
-  - url: http://localhost:8080
-    description: Direct auth-service
+- url: /api/auth
+  description: Auth service through Traefik
+tags:
+- name: Auth
+  description: Authentication and user management endpoints.
 paths:
-  /auth/register:
-    post:
-      tags:
-        - Auth
-      summary: Register a user
-      description: Creates a new account with USER role.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RegisterRequest'
-      responses:
-        '201':
-          description: User registered
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MeResponse'
-        '400':
-          description: Validation failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '409':
-          description: Username or email already exists
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  /auth/login:
-    post:
-      tags:
-        - Auth
-      summary: Login
-      description: Authenticates with username/password and returns a JWT token.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LoginRequest'
-      responses:
-        '200':
-          description: Login successful
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '400':
-          description: Validation failed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Invalid credentials
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  /users/me:
-    get:
-      tags:
-        - Auth
-      summary: Current user profile
-      description: Returns profile data for the authenticated user.
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Profile returned
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MeResponse'
-        '401':
-          description: Authentication required
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
-          description: User profile not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
   /admin/users/{id}/roles:
     put:
       tags:
-        - Auth
+      - Auth
       summary: Update user role
       description: Requires ADMIN role. Assigns a new role to a user.
-      security:
-        - bearerAuth: []
+      operationId: updateRoles
       parameters:
-        - name: id
-          in: path
-          required: true
-          description: User id to update.
-          schema:
-            type: integer
-            format: int64
-            example: 1
-      requestBody:
+      - name: id
+        in: path
+        description: User id to update.
         required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateRoleRequest'
+              $ref: "#/components/schemas/UpdateRoleRequest"
+        required: true
       responses:
-        '200':
-          description: Role updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MeResponse'
-        '400':
-          description: Invalid role or payload
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          description: Authentication required
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '403':
-          description: Admin role required
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '404':
+        "404":
           description: Target user not found
           content:
-            application/json:
+            '*/*':
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
+        "200":
+          description: Role updated
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "403":
+          description: Admin role required
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "400":
+          description: Invalid role or payload
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      security:
+      - bearerAuth: []
+  /register:
+    post:
+      tags:
+      - Auth
+      summary: Register a user
+      description: Creates a new account with USER role.
+      operationId: register
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+        required: true
+      responses:
+        "400":
+          description: Validation failed
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "201":
+          description: User registered
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "409":
+          description: Username or email already exists
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /login:
+    post:
+      tags:
+      - Auth
+      summary: Login
+      description: Authenticates with username/password and returns a JWT token.
+      operationId: login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+        required: true
+      responses:
+        "400":
+          description: Validation failed
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "200":
+          description: Login successful
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /users/me:
+    get:
+      tags:
+      - Auth
+      summary: Current user profile
+      description: Returns profile data for the authenticated user.
+      operationId: me
+      responses:
+        "404":
+          description: User profile not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "200":
+          description: Profile returned
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "401":
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      security:
+      - bearerAuth: []
 components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
   schemas:
-    Role:
-      type: string
-      enum:
-        - USER
-        - ADMIN
-    RegisterRequest:
-      type: object
-      required:
-        - username
-        - email
-        - password
-      properties:
-        username:
-          type: string
-          minLength: 3
-          maxLength: 50
-          example: alice
-        email:
-          type: string
-          format: email
-          example: alice@example.com
-        password:
-          type: string
-          minLength: 6
-          maxLength: 255
-          example: password123
-        phone:
-          type: string
-          maxLength: 30
-          nullable: true
-          example: '+40123456789'
-        address:
-          type: string
-          maxLength: 255
-          nullable: true
-          example: Main Street 1
-    LoginRequest:
-      type: object
-      required:
-        - username
-        - password
-      properties:
-        username:
-          type: string
-          example: alice
-        password:
-          type: string
-          example: password123
-    AuthResponse:
-      type: object
-      properties:
-        token:
-          type: string
-          example: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.signature
-        username:
-          type: string
-          example: alice
-        role:
-          $ref: '#/components/schemas/Role'
-    MeResponse:
-      type: object
-      properties:
-        userId:
-          type: integer
-          format: int64
-          example: 1
-        username:
-          type: string
-          example: alice
-        email:
-          type: string
-          format: email
-          example: alice@example.com
-        phone:
-          type: string
-          nullable: true
-          example: '+40123456789'
-        address:
-          type: string
-          nullable: true
-          example: Main Street 1
-        role:
-          $ref: '#/components/schemas/Role'
     UpdateRoleRequest:
-      type: object
       required:
-        - role
+      - role
+      type: object
       properties:
         role:
-          $ref: '#/components/schemas/Role'
+          type: string
+          description: New role assigned to the target user.
+          example: ADMIN
+          enum:
+          - USER
+          - ADMIN
+      description: Payload used by admins to update a user's role.
     ErrorResponse:
       type: object
       properties:
         message:
           type: string
+          description: Human-readable error details.
           example: Authentication required
+      description: Standard API error payload.
+    MeResponse:
+      type: object
+      properties:
+        userId:
+          type: integer
+          description: Numeric user identifier.
+          format: int64
+          example: 1
+        username:
+          type: string
+          description: Unique username.
+          example: alice
+        email:
+          type: string
+          description: Email address.
+          example: alice@example.com
+        phone:
+          type: string
+          description: Optional phone number.
+          nullable: true
+          example: "+40123456789"
+        address:
+          type: string
+          description: Optional address.
+          nullable: true
+          example: Main Street 1
+        role:
+          type: string
+          description: Current user role.
+          example: USER
+          enum:
+          - USER
+          - ADMIN
+      description: User profile response.
+    RegisterRequest:
+      required:
+      - email
+      - password
+      - username
+      type: object
+      properties:
+        username:
+          maxLength: 50
+          minLength: 3
+          type: string
+          description: Unique username used to sign in.
+          example: alice
+        email:
+          type: string
+          description: User email address.
+          example: alice@example.com
+        password:
+          maxLength: 255
+          minLength: 6
+          type: string
+          description: Raw password that will be hashed by the service.
+          example: password123
+        phone:
+          maxLength: 30
+          minLength: 0
+          type: string
+          description: Optional phone number.
+          nullable: true
+          example: "+40123456789"
+        address:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: Optional address.
+          nullable: true
+          example: Main Street 1
+      description: Payload used to create a new user account.
+    LoginRequest:
+      required:
+      - password
+      - username
+      type: object
+      properties:
+        username:
+          type: string
+          description: Username of an existing account.
+          example: alice
+        password:
+          type: string
+          description: Password of the account.
+          example: password123
+      description: Credentials used to obtain a JWT token.
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: "JWT bearer token to be sent as `Authorization: Bearer <token>`."
+          example: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.signature
+        username:
+          type: string
+          description: Authenticated username.
+          example: alice
+        role:
+          type: string
+          description: Current role embedded in the token.
+          example: USER
+          enum:
+          - USER
+          - ADMIN
+      description: Authentication result with bearer token.
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

@@ -1,15 +1,23 @@
 http:
   routers:
     auth-service:
-      rule: "PathPrefix(`/auth`) || PathPrefix(`/users`) || PathPrefix(`/admin`) || PathPrefix(`/swagger-ui`) || PathPrefix(`/v3/api-docs`) || Path(`/v3/api-docs.yaml`)"
+      rule: "PathPrefix(`/api/auth`)"
       entryPoints:
         - http
       service: auth-service
       middlewares:
         - auth-service-chain
 
+    fleet-service:
+      rule: "PathPrefix(`/api/fleet`)"
+      entryPoints:
+        - http
+      service: fleet-service
+      middlewares:
+        - fleet-service-chain
+
     dashboard:
-      rule: "Host(`traefik.localhost`) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))"
+      rule: "(Host(`traefik.localhost`) || Host(`localhost`)) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))"
       entryPoints:
         - traefik
       service: api@internal
@@ -21,6 +29,12 @@ http:
       loadBalancer:
         servers:
           - url: "http://auth-service:8080"
+        passHostHeader: true
+
+    fleet-service:
+      loadBalancer:
+        servers:
+          - url: "http://fleet-service:8080"
         passHostHeader: true
 
   middlewares:
@@ -84,5 +98,26 @@ http:
           - rate-limit
           - cors-headers
           - request-headers
+          - auth-strip-prefix
+          - compression
+          - retry
+
+    auth-strip-prefix:
+      stripPrefix:
+        prefixes:
+          - /api/auth
+
+    fleet-strip-prefix:
+      stripPrefix:
+        prefixes:
+          - /api/fleet
+
+    fleet-service-chain:
+      chain:
+        middlewares:
+          - rate-limit
+          - cors-headers
+          - request-headers
+          - fleet-strip-prefix
           - compression
           - retry

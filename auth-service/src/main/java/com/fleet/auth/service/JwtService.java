@@ -13,8 +13,9 @@ import org.springframework.util.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
-import java.util.Collection;
 import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -30,8 +31,15 @@ public class JwtService {
         Role role = userDetails instanceof CredentialDetails credentialDetails
                 ? credentialDetails.getRole()
                 : Role.fromAuthorities(userDetails.getAuthorities()).stream().findFirst().orElseThrow();
+        Map<String, Object> claims = new LinkedHashMap<>();
+        claims.put(ROLE_CLAIM, role.name());
+        claims.put("roles", List.of(role.name()));
+        if (userDetails instanceof CredentialDetails credentialDetails && credentialDetails.getUserId() != null) {
+            claims.put("userId", credentialDetails.getUserId());
+        }
+
         return Jwts.builder()
-                .addClaims(Map.of(ROLE_CLAIM, role.name()))
+                .addClaims(claims)
                 .setSubject(userDetails.getUsername())
                 .setIssuedAt(new Date(System.currentTimeMillis()))
                 .setExpiration(new Date(System.currentTimeMillis() + jwtProperties.getExpirationMs()))

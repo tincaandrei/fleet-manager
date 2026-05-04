@@ -79,7 +79,7 @@ class AuthIntegrationTest {
 
     @Test
     void registerCreatesCredentialAndUserDataWithUserRole() throws Exception {
-        String response = mockMvc.perform(post("/auth/register")
+        String response = mockMvc.perform(post("/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -119,7 +119,7 @@ class AuthIntegrationTest {
         assertEquals("alice", jwtService.extractUsername(token));
         assertEquals(Role.USER, jwtService.extractRole(token));
 
-        mockMvc.perform(post("/auth/login")
+        mockMvc.perform(post("/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -157,7 +157,8 @@ class AuthIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.openapi").exists())
-                .andExpect(jsonPath("$.paths['/auth/register']").exists())
+                .andExpect(jsonPath("$.paths['/register']").exists())
+                .andExpect(jsonPath("$.paths['/login']").exists())
                 .andExpect(jsonPath("$.paths['/users/me']").exists());
 
         mockMvc.perform(get("/swagger-ui/index.html"))
@@ -273,7 +274,7 @@ class AuthIntegrationTest {
     }
 
     private String login(String username, String password) throws Exception {
-        String response = mockMvc.perform(post("/auth/login")
+        String response = mockMvc.perform(post("/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {

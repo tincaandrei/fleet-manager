@@ -12,7 +12,6 @@ services:
       - "80:80"
       - "8081:8080" # Traefik dashboard
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/traefik.yml:/traefik.yml:ro
       - ./traefik/dynamic_conf.yml:/dynamic_conf.yml:ro
 
@@ -22,13 +21,13 @@ services:
     container_name: auth-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: auth_deploy
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${AUTH_DB_NAME:-auth_deploy}
+      POSTGRES_USER: ${AUTH_DB_USER:-auth_user}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:?Set AUTH_DB_PASSWORD in .env}
     volumes:
-      - auth-postgres-data:/var/lib/postgresql/data
+      - auth-postgres-data-v2:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d auth_deploy"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -36,7 +35,7 @@ services:
     networks:
       - fleet-net
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${AUTH_DB_HOST_PORT:-5432}:5432"
     expose:
       - "5432"
 
@@ -52,33 +51,64 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      JWT_SECRET: "96394670290123498739012349851901"
-      BOOTSTRAP_ADMIN_USERNAME: admin
-      BOOTSTRAP_ADMIN_EMAIL: admin@example.com
-      BOOTSTRAP_ADMIN_PASSWORD: admin123
+      SPRING_DATASOURCE_URL: jdbc:postgresql://auth-postgres:5432/${AUTH_DB_NAME:-auth_deploy}
+      SPRING_DATASOURCE_USERNAME: ${AUTH_DB_USER:-auth_user}
+      SPRING_DATASOURCE_PASSWORD: ${AUTH_DB_PASSWORD:?Set AUTH_DB_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD in .env}
     networks:
       - fleet-net
     expose:
       - "8080"
 
-  # Placeholder for Fleet Service (uncomment and configure when ready)
-  # fleet-service:
-  #   build:
-  #     context: ./fleet-service
-  #     dockerfile: Dockerfile
-  #   image: fleet/fleet-service:local
-  #   container_name: fleet-service
-  #   restart: unless-stopped
-  #   depends_on:
-  #     - auth-service
-  #   environment:
-  #     SPRING_PROFILES_ACTIVE: docker
-  #     JWT_SECRET: ${JWT_SECRET}
-  #     AUTH_SERVICE_URL: http://auth-service:8080
-  #   networks:
-  #     - fleet-net
-  #   expose:
-  #     - "8080"
+  # Fleet Service
+  fleet-postgres:
+    image: postgres:16-alpine
+    container_name: fleet-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${FLEET_DB_NAME:-fleet_deploy}
+      POSTGRES_USER: ${FLEET_DB_USER:-fleet_user}
+      POSTGRES_PASSWORD: ${FLEET_DB_PASSWORD:?Set FLEET_DB_PASSWORD in .env}
+    volumes:
+      - fleet-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - fleet-net
+    ports:
+      - "127.0.0.1:${FLEET_DB_HOST_PORT:-5433}:5432"
+    expose:
+      - "5432"
+
+  fleet-service:
+    build:
+      context: ./fleet-service
+      dockerfile: Dockerfile
+    image: fleet/fleet-service:local
+    container_name: fleet-service
+    restart: unless-stopped
+    depends_on:
+      fleet-postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://fleet-postgres:5432/${FLEET_DB_NAME:-fleet_deploy}
+      SPRING_DATASOURCE_USERNAME: ${FLEET_DB_USER:-fleet_user}
+      SPRING_DATASOURCE_PASSWORD: ${FLEET_DB_PASSWORD:?Set FLEET_DB_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+    networks:
+      - fleet-net
+    expose:
+      - "8080"
 
   # Placeholder for Document Service (uncomment and configure when ready)
   # document-service:
@@ -100,7 +130,8 @@ services:
   #     - "8080"
 
 volumes:
-  auth-postgres-data:
+  auth-postgres-data-v2:
+  fleet-postgres-data:
 
 networks:
   fleet-net:
