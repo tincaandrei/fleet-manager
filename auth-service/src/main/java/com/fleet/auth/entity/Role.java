@@ -11,6 +11,7 @@ import java.util.Set;
 
 public enum Role {
     USER,
+    STAFF,
     ADMIN;
 
     public String asAuthority() {

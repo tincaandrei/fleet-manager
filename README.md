@@ -12,7 +12,7 @@ Implemented features:
 - User registration and login
 - JWT generation and validation
 - BCrypt password hashing
-- Role model with `USER` and `ADMIN`
+- Role model with `USER`, `STAFF`, and `ADMIN`
 - Bootstrap admin account from environment variables
 - Current-user profile endpoint
 - Admin-only user role update endpoint
@@ -52,6 +52,40 @@ Gateway routes:
 - `GET /api/fleet/internal/vehicles/{id}/basic-info`
 - `GET /api/fleet/internal/vehicles/active`
 
+### Document Service
+
+Path: `document-service/`
+
+Implemented features:
+- PDF document upload for vehicles
+- Vehicle existence validation through Fleet Service
+- Local file storage configured by `DOCUMENT_STORAGE_PATH`
+- Local Python parser script called via `ProcessBuilder` — no separate parser service or message queue
+- Raw extracted data stored as JSONB in `document_extractions`
+- Staff/Admin review queue
+- `FAILED_PARSING` status when the Python parser fails
+- Approve as-is, approve with edits, reject, and archive flows
+- Approved document data stored separately as JSONB
+- Dedicated PostgreSQL database
+- OpenAPI/Swagger documentation
+
+Parser notes:
+- Script: `document-service/parser/parse_inspection_pdf.py` (requires `pypdf==5.1.0`)
+- Test PDFs must contain selectable/extractable text — scanned image PDFs will not yield extracted fields
+- Parser environment variables (Docker image sets these automatically):
+  - `DOCUMENT_PARSER_PYTHON` — Python executable (default in Docker: `/opt/document-parser-venv/bin/python`)
+  - `DOCUMENT_PARSER_SCRIPT_PATH` — path to the parser script (default in Docker: `/app/parser/parse_inspection_pdf.py`)
+  - `DOCUMENT_PARSER_TIMEOUT_SECONDS` — kill timeout in seconds (default: `30`)
+
+Gateway routes:
+- `POST /api/documents`
+- `GET /api/documents?vehicleId={vehicleId}`
+- `GET /api/documents/{id}`
+- `GET /api/documents/{id}/download`
+- `GET /api/documents/review-queue`
+- `POST /api/documents/{id}/review`
+- `PATCH /api/documents/{id}/archive`
+
 ## Infrastructure
 
 Implemented Docker stack:
@@ -61,11 +95,14 @@ Implemented Docker stack:
 - `auth-postgres`
 - `fleet-service`
 - `fleet-postgres`
+- `document-service`
+- `document-postgres`
 - Shared Docker network: `fleet-net`
 
 PostgreSQL ports are bound to localhost only:
 - Auth DB: `127.0.0.1:5432`
 - Fleet DB: `127.0.0.1:5433`
+- Document DB: `127.0.0.1:5434`
 
 Traefik middlewares:
 - CORS headers
@@ -85,6 +122,10 @@ Auth:
 Fleet:
 - Swagger UI: `http://localhost/api/fleet/swagger-ui/index.html`
 - OpenAPI JSON: `http://localhost/api/fleet/v3/api-docs`
+
+Documents:
+- Swagger UI: `http://localhost/api/documents/swagger-ui/index.html`
+- OpenAPI JSON: `http://localhost/api/documents/v3/api-docs`
 
 Traefik dashboard:
 - `http://localhost:8081/dashboard/`
@@ -110,6 +151,11 @@ Required values:
 - `FLEET_DB_USER`
 - `FLEET_DB_PASSWORD`
 - `FLEET_DB_HOST_PORT`
+- `DOCUMENT_DB_NAME`
+- `DOCUMENT_DB_USER`
+- `DOCUMENT_DB_PASSWORD`
+- `DOCUMENT_DB_HOST_PORT`
+- `DOCUMENT_STORAGE_PATH`
 
 The local `.env` file is ignored by Git.
 
@@ -132,6 +178,7 @@ View logs:
 ```powershell
 docker compose logs -f auth-service
 docker compose logs -f fleet-service
+docker compose logs -f document-service
 docker compose logs -f traefik
 ```
 
@@ -161,6 +208,85 @@ Port: 5433
 Database: fleet_deploy
 User: value of FLEET_DB_USER
 Password: value of FLEET_DB_PASSWORD
+```
+
+Document database:
+
+```text
+Host: localhost
+Port: 5434
+Database: document_deploy
+User: value of DOCUMENT_DB_USER
+Password: value of DOCUMENT_DB_PASSWORD
+```
+
+## Document Service Curl Examples
+
+Set a token first:
+
+```bash
+TOKEN="<jwt>"
+```
+
+Upload a PDF:
+
+```bash
+curl -X POST "http://localhost/api/documents" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@inspection.pdf;type=application/pdf" \
+  -F "vehicleId=1" \
+  -F "documentType=INSPECTION"
+```
+
+List vehicle documents:
+
+```bash
+curl "http://localhost/api/documents?vehicleId=1" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Get the review queue:
+
+```bash
+curl "http://localhost/api/documents/review-queue" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Approve a document:
+
+```bash
+curl -X POST "http://localhost/api/documents/<document-id>/review" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "decision": "APPROVE",
+    "approvedData": {
+      "documentType": "INSPECTION",
+      "inspectionNumber": "MOCK-ITP-2026-001",
+      "expiryDate": "2027-03-10"
+    },
+    "comment": "Approved after review"
+  }'
+```
+
+Reject a document:
+
+```bash
+curl -X POST "http://localhost/api/documents/<document-id>/review" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "decision": "REJECT",
+    "comment": "Uploaded document is not readable"
+  }'
+```
+
+Download a document:
+
+```bash
+curl -L "http://localhost/api/documents/<document-id>/download" \
+  -H "Authorization: Bearer $TOKEN" \
+  -o document.pdf
 ```
 
 ## Tests
@@ -197,11 +323,11 @@ cd fleet-service
 Generated specs are kept in:
 - `auth-service/openapi.yaml`
 - `fleet-service/openapi.yaml`
+- `document-service/openapi.yaml`
 
 ## Not Implemented Yet
 
 - Frontend application
-- Document service
 - Maintenance scheduling
 - Notifications
 - Production TLS/ACME setup

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem \"e:\\\\Users\\\\Andrei\\\\Politemnita\\\\AN4-PC\\\\licenta\\\\fleet manager\\\\frontend\\\\src\" -Recurse | Where-Object { -not $_.PSIsContainer } | Select-Object -ExpandProperty FullName | ForEach-Object { $_.Replace\\(\"e:\\\\Users\\\\Andrei\\\\Politemnita\\\\AN4-PC\\\\licenta\\\\fleet manager\\\\frontend\\\\src\\\\\", \"src/\"\\) })",
+      "Bash(Get-ChildItem -Path \"e:\\\\Users\\\\Andrei\\\\Politemnita\\\\AN4-PC\\\\licenta\\\\fleet manager\\\\document-service\" -Recurse -File)",
+      "Bash(Select-Object FullName)",
+      "Bash(Get-ChildItem -Path \"e:\\\\Users\\\\Andrei\\\\Politemnita\\\\AN4-PC\\\\licenta\\\\fleet manager\\\\frontend\" -Recurse -File)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

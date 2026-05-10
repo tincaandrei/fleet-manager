@@ -13,11 +13,11 @@
       </jdbc-additional-properties>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
-    <data-source source="LOCAL" name="fleet@localhost " uuid="07412734-7bc5-4b42-9ee5-68ec2daf4a7b">
+    <data-source source="LOCAL" name="document_deploy@localhost" uuid="9d7beaf8-a147-4849-957a-a79743133729">
       <driver-ref>postgresql</driver-ref>
       <synchronize>true</synchronize>
       <jdbc-driver>org.postgresql.Driver</jdbc-driver>
-      <jdbc-url>jdbc:postgresql://localhost:5433/fleet_deploy</jdbc-url>
+      <jdbc-url>jdbc:postgresql://localhost:5434/document_deploy</jdbc-url>
       <jdbc-additional-properties>
         <property name="com.intellij.clouds.kubernetes.db.host.port" />
         <property name="com.intellij.clouds.kubernetes.db.enabled" value="false" />

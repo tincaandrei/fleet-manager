@@ -16,6 +16,14 @@ http:
       middlewares:
         - fleet-service-chain
 
+    document-service:
+      rule: "PathPrefix(`/api/documents`)"
+      entryPoints:
+        - http
+      service: document-service
+      middlewares:
+        - document-service-chain
+
     dashboard:
       rule: "(Host(`traefik.localhost`) || Host(`localhost`)) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))"
       entryPoints:
@@ -35,6 +43,12 @@ http:
       loadBalancer:
         servers:
           - url: "http://fleet-service:8080"
+        passHostHeader: true
+
+    document-service:
+      loadBalancer:
+        servers:
+          - url: "http://document-service:8080"
         passHostHeader: true
 
   middlewares:
@@ -112,6 +126,11 @@ http:
         prefixes:
           - /api/fleet
 
+    document-strip-prefix:
+      stripPrefix:
+        prefixes:
+          - /api/documents
+
     fleet-service-chain:
       chain:
         middlewares:
@@ -119,5 +138,15 @@ http:
           - cors-headers
           - request-headers
           - fleet-strip-prefix
+          - compression
+          - retry
+
+    document-service-chain:
+      chain:
+        middlewares:
+          - rate-limit
+          - cors-headers
+          - request-headers
+          - document-strip-prefix
           - compression
           - retry

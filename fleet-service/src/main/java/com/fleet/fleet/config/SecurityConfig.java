@@ -25,7 +25,7 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/v3/api-docs.yaml").permitAll()
-                        .requestMatchers("/internal/vehicles/**").hasAnyRole("ADMIN", "FLEET_MANAGER", "AUDITOR")
+                        .requestMatchers("/internal/vehicles/**").hasAnyRole("ADMIN", "FLEET_MANAGER", "AUDITOR", "STAFF", "USER")
                         .requestMatchers(HttpMethod.GET, "/vehicles", "/vehicles/**").hasAnyRole("ADMIN", "FLEET_MANAGER", "AUDITOR", "EMPLOYEE", "USER")
                         .requestMatchers(HttpMethod.POST, "/vehicles").hasAnyRole("ADMIN", "FLEET_MANAGER")
                         .requestMatchers(HttpMethod.PUT, "/vehicles/**").hasAnyRole("ADMIN", "FLEET_MANAGER")

@@ -1,6 +1,6 @@
 # API Endpoint Reference
 
-This document describes the current `auth-service` and `fleet-service` APIs exposed through Traefik.
+This document describes the current `auth-service`, `fleet-service`, and `document-service` APIs exposed through Traefik.
 
 ## Base URL
 - `http://localhost` (through Traefik)
@@ -12,6 +12,8 @@ This document describes the current `auth-service` and `fleet-service` APIs expo
 - Versioned spec in repo: `auth-service/openapi.yaml`
 - Fleet Swagger UI: `http://localhost/api/fleet/swagger-ui/index.html`
 - Fleet OpenAPI JSON: `http://localhost/api/fleet/v3/api-docs`
+- Document Swagger UI: `http://localhost/api/documents/swagger-ui/index.html`
+- Document OpenAPI JSON: `http://localhost/api/documents/v3/api-docs`
 
 To regenerate the versioned spec:
 
@@ -113,7 +115,7 @@ Content-Type: application/json
 Request:
 ```json
 {
-  "role": "ADMIN"
+  "role": "STAFF"
 }
 ```
 
@@ -241,7 +243,97 @@ GET /api/fleet/internal/vehicles/active
 Authorization: Bearer <jwt>
 ```
 
-Internal endpoints require `ADMIN`, `FLEET_MANAGER`, or `AUDITOR`.
+Internal vehicle existence lookups are also used by Document Service uploads with authenticated user tokens.
+
+## Document Endpoints
+
+Gateway base path: `http://localhost/api/documents`
+
+The Document Service owns uploaded PDF metadata, raw parser extractions, and approved review data. On upload, the Java service calls `document-service/parser/parse_inspection_pdf.py` via `ProcessBuilder`. The script requires `pypdf==5.1.0` and only extracts text from PDFs with selectable text layers — scanned image PDFs will result in `FAILED_PARSING`.
+
+Roles:
+- `USER`, `STAFF`, `ADMIN`: upload and download documents.
+- `USER`: list only validated vehicle documents with approved data.
+- `STAFF`, `ADMIN`: view all document statuses, raw extraction data, and review queue.
+- `ADMIN`: archive documents.
+
+### Upload Document
+```http
+POST /api/documents
+Authorization: Bearer <jwt>
+Content-Type: multipart/form-data
+```
+
+Form fields:
+- `file`: PDF file
+- `vehicleId`: vehicle id
+- `documentType`: `INSPECTION`, `INSURANCE`, `INVOICE`, `REGISTRATION`, or `OTHER`
+
+Example:
+```bash
+curl -X POST "http://localhost/api/documents" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@inspection.pdf;type=application/pdf" \
+  -F "vehicleId=1" \
+  -F "documentType=INSPECTION"
+```
+
+### List Vehicle Documents
+```http
+GET /api/documents?vehicleId=1
+Authorization: Bearer <jwt>
+```
+
+### Get Document Details
+```http
+GET /api/documents/{id}
+Authorization: Bearer <jwt>
+```
+
+### Review Queue
+```http
+GET /api/documents/review-queue
+Authorization: Bearer <staff-or-admin-jwt>
+```
+
+### Approve Document
+```http
+POST /api/documents/{id}/review
+Authorization: Bearer <staff-or-admin-jwt>
+Content-Type: application/json
+```
+
+```json
+{
+  "decision": "APPROVE",
+  "approvedData": {
+    "documentType": "INSPECTION",
+    "inspectionNumber": "MOCK-ITP-2026-001",
+    "expiryDate": "2027-03-10"
+  },
+  "comment": "Approved after review"
+}
+```
+
+### Reject Document
+```http
+POST /api/documents/{id}/review
+Authorization: Bearer <staff-or-admin-jwt>
+Content-Type: application/json
+```
+
+```json
+{
+  "decision": "REJECT",
+  "comment": "Uploaded document is not readable"
+}
+```
+
+### Download Document
+```http
+GET /api/documents/{id}/download
+Authorization: Bearer <jwt>
+```
 
 ## Run
 

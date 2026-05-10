@@ -110,28 +110,66 @@ services:
     expose:
       - "8080"
 
-  # Placeholder for Document Service (uncomment and configure when ready)
-  # document-service:
-  #   build:
-  #     context: ./document-service
-  #     dockerfile: Dockerfile
-  #   image: fleet/document-service:local
-  #   container_name: document-service
-  #   restart: unless-stopped
-  #   depends_on:
-  #     - auth-service
-  #   environment:
-  #     SPRING_PROFILES_ACTIVE: docker
-  #     JWT_SECRET: ${JWT_SECRET}
-  #     AUTH_SERVICE_URL: http://auth-service:8080
-  #   networks:
-  #     - fleet-net
-  #   expose:
-  #     - "8080"
+  # Document Service
+  document-postgres:
+    image: postgres:16-alpine
+    container_name: document-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DOCUMENT_DB_NAME:-document_deploy}
+      POSTGRES_USER: ${DOCUMENT_DB_USER:-document_user}
+      POSTGRES_PASSWORD: ${DOCUMENT_DB_PASSWORD:?Set DOCUMENT_DB_PASSWORD in .env}
+    volumes:
+      - document-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - fleet-net
+    ports:
+      - "127.0.0.1:${DOCUMENT_DB_HOST_PORT:-5434}:5432"
+    expose:
+      - "5432"
+
+  document-service:
+    build:
+      context: ./document-service
+      dockerfile: Dockerfile
+    image: fleet/document-service:local
+    container_name: document-service
+    restart: unless-stopped
+    depends_on:
+      document-postgres:
+        condition: service_healthy
+      fleet-service:
+        condition: service_started
+      auth-service:
+        condition: service_started
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://document-postgres:5432/${DOCUMENT_DB_NAME:-document_deploy}
+      SPRING_DATASOURCE_USERNAME: ${DOCUMENT_DB_USER:-document_user}
+      SPRING_DATASOURCE_PASSWORD: ${DOCUMENT_DB_PASSWORD:?Set DOCUMENT_DB_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      FLEET_SERVICE_URL: http://fleet-service:8080
+      DOCUMENT_STORAGE_PATH: /app/document-storage
+      DOCUMENT_PARSER_PYTHON: /opt/document-parser-venv/bin/python
+      DOCUMENT_PARSER_SCRIPT_PATH: /app/parser/parse_inspection_pdf.py
+    volumes:
+      - document-storage-data:/app/document-storage
+    networks:
+      - fleet-net
+    expose:
+      - "8080"
 
 volumes:
   auth-postgres-data-v2:
   fleet-postgres-data:
+  document-postgres-data:
+  document-storage-data:
 
 networks:
   fleet-net:
