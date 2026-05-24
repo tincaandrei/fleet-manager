@@ -16,7 +16,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties({JwtProperties.class, DocumentStorageProperties.class, DocumentParserProperties.class})
+@EnableConfigurationProperties({JwtProperties.class, DocumentStorageProperties.class})
 public class SecurityConfig {
 
     @Bean
@@ -27,7 +27,10 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/v3/api-docs.yaml").permitAll()
                         .requestMatchers(HttpMethod.GET, "/review-queue").hasAnyRole("STAFF", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/*/review").hasAnyRole("STAFF", "ADMIN")
-                        .requestMatchers(HttpMethod.PATCH, "/*/archive").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/*/approve").hasAnyRole("STAFF", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/*/reject").hasAnyRole("STAFF", "ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/*/archive").hasAnyRole("STAFF", "ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/*/archive").hasAnyRole("STAFF", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/").hasAnyRole("USER", "STAFF", "ADMIN")
                         .requestMatchers(HttpMethod.GET, "/", "/*", "/*/download").authenticated()
                         .anyRequest().authenticated()

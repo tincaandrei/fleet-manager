@@ -7,7 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 import java.util.UUID;
 
-@Schema(description = "Document metadata with role-dependent extraction and approved data sections.")
+@Schema(description = "Document metadata with approved review data.")
 public record DocumentResponse(
         UUID id,
         Long vehicleId,
@@ -21,7 +21,7 @@ public record DocumentResponse(
         Long uploadedByUserId,
         Instant createdAt,
         Instant updatedAt,
-        ExtractionResponse extraction,
-        ApprovedDataResponse approvedData
+        DocumentExtractionResponse extraction,
+        ApprovedDocumentDataResponse approvedData
 ) {
 }

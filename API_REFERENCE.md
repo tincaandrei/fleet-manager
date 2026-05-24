@@ -249,12 +249,12 @@ Internal vehicle existence lookups are also used by Document Service uploads wit
 
 Gateway base path: `http://localhost/api/documents`
 
-The Document Service owns uploaded PDF metadata, raw parser extractions, and approved review data. On upload, the Java service calls `document-service/parser/parse_inspection_pdf.py` via `ProcessBuilder`. The script requires `pypdf==5.1.0` and only extracts text from PDFs with selectable text layers — scanned image PDFs will result in `FAILED_PARSING`.
+The Document Service owns uploaded PDF metadata and approved review data. On upload, the service stores the PDF and marks it as `NEEDS_REVIEW` for manual review.
 
 Roles:
 - `USER`, `STAFF`, `ADMIN`: upload and download documents.
 - `USER`: list only validated vehicle documents with approved data.
-- `STAFF`, `ADMIN`: view all document statuses, raw extraction data, and review queue.
+- `STAFF`, `ADMIN`: view all document statuses and the review queue.
 - `ADMIN`: archive documents.
 
 ### Upload Document

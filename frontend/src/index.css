@@ -379,11 +379,9 @@ p {
 }
 
 /* ── Document status badges ─────────────────────────── */
-.status-PARSING        { background: #cce5ff; color: #004085; }
 .status-NEEDS_REVIEW   { background: #fff3cd; color: #856404; }
 .status-VALIDATED      { background: #d4edda; color: #155724; }
 .status-REJECTED       { background: #f8d7da; color: #721c24; }
-.status-FAILED_PARSING { background: #f8d7da; color: #721c24; }
 .status-ARCHIVED       { background: #e2e3e5; color: #383d41; }
 
 /* ── Additional button variants ─────────────────────── */

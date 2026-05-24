@@ -37,7 +37,7 @@ public class VehicleDocument {
     private Long vehicleId;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 50)
+    @Column(length = 50)
     private DocumentType documentType;
 
     @Enumerated(EnumType.STRING)
@@ -62,10 +62,10 @@ public class VehicleDocument {
     private Long uploadedByUserId;
 
     @OneToOne(mappedBy = "document")
-    private DocumentExtraction extraction;
+    private ApprovedDocumentData approvedData;
 
     @OneToOne(mappedBy = "document")
-    private ApprovedDocumentData approvedData;
+    private DocumentExtractionDraft extractionDraft;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)

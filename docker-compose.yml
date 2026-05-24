@@ -156,8 +156,6 @@ services:
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       FLEET_SERVICE_URL: http://fleet-service:8080
       DOCUMENT_STORAGE_PATH: /app/document-storage
-      DOCUMENT_PARSER_PYTHON: /opt/document-parser-venv/bin/python
-      DOCUMENT_PARSER_SCRIPT_PATH: /app/parser/parse_inspection_pdf.py
     volumes:
       - document-storage-data:/app/document-storage
     networks:

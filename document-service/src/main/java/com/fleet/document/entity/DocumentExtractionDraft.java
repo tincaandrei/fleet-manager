@@ -23,17 +23,18 @@ import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 @Entity
-@Table(name = "document_extractions")
+@Table(name = "document_extraction_draft")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class DocumentExtraction {
+public class DocumentExtractionDraft {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -43,22 +44,35 @@ public class DocumentExtraction {
     @JoinColumn(name = "document_id", nullable = false, unique = true)
     private VehicleDocument document;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 50)
-    private ExtractionStatus extractionStatus;
+    @Column(length = 100)
+    private String detectedDocumentType;
 
-    @Column(nullable = false)
-    private String parserName;
-
-    @Column(nullable = false)
-    private String parserVersion;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb", nullable = false)
-    private Map<String, Object> rawExtractedData;
+    @Column(length = 100)
+    private String detectedSubtype;
 
     @Column(precision = 5, scale = 4)
-    private BigDecimal extractionConfidence;
+    private BigDecimal confidence;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private Map<String, Object> extractedData;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private List<String> warnings;
+
+    @Column(length = 100)
+    private String parserName;
+
+    @Column(length = 100)
+    private String parserVersion;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 50)
+    private ParserStatus parserStatus;
+
+    @Column(length = 100)
+    private String errorCode;
 
     @Column(length = 1000)
     private String errorMessage;

@@ -116,9 +116,7 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
       docId: doc.id,
       decision,
       approvedDataJson:
-        decision === 'APPROVE'
-          ? JSON.stringify(doc.extraction?.rawExtractedData ?? {}, null, 2)
-          : '',
+        decision === 'APPROVE' ? JSON.stringify({ documentType: doc.documentType }, null, 2) : '',
       comment: '',
       loading: false,
       error: null,
@@ -228,11 +226,6 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
                 <span>Uploaded: {new Date(doc.createdAt).toLocaleString()}</span>
                 <span>Size: {formatBytes(doc.fileSize)}</span>
               </div>
-
-              {/* Parser error (FAILED_PARSING only) */}
-              {doc.status === 'FAILED_PARSING' && doc.extraction?.errorMessage && (
-                <p className="doc-error-msg">Parser error: {doc.extraction.errorMessage}</p>
-              )}
 
               {/* Approved data */}
               {doc.approvedData && (

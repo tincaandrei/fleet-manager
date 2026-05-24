@@ -1,7 +1,11 @@
 package com.fleet.document.controller;
 
+import com.fleet.document.dto.ApproveDocumentRequest;
+import com.fleet.document.dto.ApprovedDocumentDataResponse;
 import com.fleet.document.dto.DocumentResponse;
 import com.fleet.document.dto.ErrorResponse;
+import com.fleet.document.dto.ParserResultRequest;
+import com.fleet.document.dto.RejectDocumentRequest;
 import com.fleet.document.dto.ReviewDocumentRequest;
 import com.fleet.document.entity.DocumentType;
 import com.fleet.document.entity.VehicleDocument;
@@ -29,7 +33,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -60,7 +63,7 @@ public class DocumentController {
     private final DocumentService documentService;
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Upload document", description = "Uploads a PDF for a vehicle, stores it, runs the local Python parser, and marks it as NEEDS_REVIEW when parsing succeeds.")
+    @Operation(summary = "Upload document", description = "Uploads a PDF for a vehicle, stores it, and marks it as PARSING.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Document uploaded", content = @Content(schema = @Schema(implementation = DocumentResponse.class))),
             @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -71,23 +74,41 @@ public class DocumentController {
             @Parameter(description = "PDF file to upload.", required = true)
             @RequestPart("file") MultipartFile file,
             @Parameter(description = "Vehicle id.", example = "1", required = true)
-            @RequestParam Long vehicleId,
-            @Parameter(description = "Document type.", example = "INSPECTION", required = true)
-            @RequestParam DocumentType documentType,
+            @RequestParam(name = "vehicleId") Long vehicleId,
+            @Parameter(description = "Optional declared document type.", example = "INSPECTION")
+            @RequestParam(name = "declaredDocumentType", required = false) DocumentType declaredDocumentType,
+            @Parameter(description = "Legacy optional declared document type.", example = "INSPECTION")
+            @RequestParam(name = "documentType", required = false) DocumentType documentType,
             HttpServletRequest servletRequest,
             Authentication authentication
     ) {
         return ResponseEntity.ok(documentService.upload(
                 file,
                 vehicleId,
-                documentType,
+                declaredDocumentType == null ? documentType : declaredDocumentType,
                 servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
                 authentication
         ));
     }
 
+    @PostMapping("/{id}/parser-result")
+    @Operation(summary = "Receive parser result", description = "Stores parser output as an unapproved extraction draft.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Parser result accepted", content = @Content(schema = @Schema(implementation = DocumentResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid parser result"),
+            @ApiResponse(responseCode = "401", description = "Authentication required"),
+            @ApiResponse(responseCode = "404", description = "Document not found")
+    })
+    public ResponseEntity<DocumentResponse> receiveParserResult(
+            @Parameter(description = "Document id.") @PathVariable UUID id,
+            @Valid @RequestBody ParserResultRequest request,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(documentService.receiveParserResult(id, request, authentication));
+    }
+
     @GetMapping
-    @Operation(summary = "List documents by vehicle", description = "USER sees only validated documents with approved data. STAFF/ADMIN see all statuses and raw extraction data.")
+    @Operation(summary = "List documents by vehicle", description = "USER sees only validated documents with approved data. STAFF/ADMIN see all document statuses.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Documents returned", content = @Content(array = @ArraySchema(schema = @Schema(implementation = DocumentResponse.class)))),
             @ApiResponse(responseCode = "400", description = "Vehicle id is missing or invalid"),
@@ -95,14 +116,33 @@ public class DocumentController {
     })
     public ResponseEntity<List<DocumentResponse>> listByVehicle(
             @Parameter(description = "Vehicle id.", example = "1", required = true)
-            @RequestParam Long vehicleId,
+            @RequestParam(name = "vehicleId") Long vehicleId,
             Authentication authentication
     ) {
         return ResponseEntity.ok(documentService.listByVehicle(vehicleId, authentication));
     }
 
+    @GetMapping("/vehicles/{vehicleId}/documents")
+    @Operation(summary = "List documents by vehicle", description = "Path-based alias for listing vehicle documents.")
+    public ResponseEntity<List<DocumentResponse>> listVehicleDocuments(
+            @Parameter(description = "Vehicle id.", example = "1", required = true)
+            @PathVariable Long vehicleId,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(documentService.getVehicleDocuments(vehicleId, authentication));
+    }
+
+    @GetMapping("/vehicles/{vehicleId}/approved-document-data")
+    @Operation(summary = "List approved document data by vehicle", description = "Returns official approved document data for a vehicle.")
+    public ResponseEntity<List<ApprovedDocumentDataResponse>> listApprovedVehicleDocumentData(
+            @Parameter(description = "Vehicle id.", example = "1", required = true)
+            @PathVariable Long vehicleId
+    ) {
+        return ResponseEntity.ok(documentService.getApprovedVehicleDocumentData(vehicleId));
+    }
+
     @GetMapping("/{id}")
-    @Operation(summary = "Get document details", description = "Returns document metadata. STAFF/ADMIN also receive raw extraction data.")
+    @Operation(summary = "Get document details", description = "Returns document metadata and approved review data when present.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Document returned", content = @Content(schema = @Schema(implementation = DocumentResponse.class))),
             @ApiResponse(responseCode = "401", description = "Authentication required"),
@@ -143,8 +183,8 @@ public class DocumentController {
             @ApiResponse(responseCode = "401", description = "Authentication required"),
             @ApiResponse(responseCode = "403", description = "STAFF or ADMIN role required")
     })
-    public ResponseEntity<List<DocumentResponse>> reviewQueue() {
-        return ResponseEntity.ok(documentService.reviewQueue());
+    public ResponseEntity<List<DocumentResponse>> reviewQueue(Authentication authentication) {
+        return ResponseEntity.ok(documentService.reviewQueue(authentication));
     }
 
     @PostMapping("/{id}/review")
@@ -169,8 +209,37 @@ public class DocumentController {
         return ResponseEntity.ok(documentService.review(id, request, authentication));
     }
 
+    @PostMapping("/{id}/approve")
+    @Operation(summary = "Approve document extraction", description = "Creates or updates official approved document data. Requires STAFF or ADMIN.")
+    public ResponseEntity<DocumentResponse> approve(
+            @Parameter(description = "Document id.") @PathVariable UUID id,
+            @Valid @RequestBody ApproveDocumentRequest request,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(documentService.approveDocument(id, request, authentication));
+    }
+
+    @PostMapping("/{id}/reject")
+    @Operation(summary = "Reject document extraction", description = "Rejects an extraction draft or failed parsing result. Requires STAFF or ADMIN.")
+    public ResponseEntity<DocumentResponse> reject(
+            @Parameter(description = "Document id.") @PathVariable UUID id,
+            @RequestBody RejectDocumentRequest request,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(documentService.rejectDocument(id, request, authentication));
+    }
+
+    @PostMapping("/{id}/archive")
+    @Operation(summary = "Archive document", description = "Marks a document as ARCHIVED. Requires STAFF or ADMIN.")
+    public ResponseEntity<DocumentResponse> archivePost(
+            @Parameter(description = "Document id.") @PathVariable UUID id,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(documentService.archiveDocument(id, authentication));
+    }
+
     @PatchMapping("/{id}/archive")
-    @Operation(summary = "Archive document", description = "Marks a document as ARCHIVED. Requires ADMIN.")
+    @Operation(summary = "Archive document", description = "Marks a document as ARCHIVED. Requires STAFF or ADMIN.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Document archived", content = @Content(schema = @Schema(implementation = DocumentResponse.class))),
             @ApiResponse(responseCode = "401", description = "Authentication required"),
@@ -178,8 +247,9 @@ public class DocumentController {
             @ApiResponse(responseCode = "404", description = "Document not found")
     })
     public ResponseEntity<DocumentResponse> archive(
-            @Parameter(description = "Document id.") @PathVariable UUID id
+            @Parameter(description = "Document id.") @PathVariable UUID id,
+            Authentication authentication
     ) {
-        return ResponseEntity.ok(documentService.archive(id));
+        return ResponseEntity.ok(documentService.archiveDocument(id, authentication));
     }
 }

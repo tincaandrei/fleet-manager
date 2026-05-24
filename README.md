@@ -60,22 +60,12 @@ Implemented features:
 - PDF document upload for vehicles
 - Vehicle existence validation through Fleet Service
 - Local file storage configured by `DOCUMENT_STORAGE_PATH`
-- Local Python parser script called via `ProcessBuilder` — no separate parser service or message queue
-- Raw extracted data stored as JSONB in `document_extractions`
 - Staff/Admin review queue
-- `FAILED_PARSING` status when the Python parser fails
-- Approve as-is, approve with edits, reject, and archive flows
+- Manual approve, reject, and archive flows
 - Approved document data stored separately as JSONB
 - Dedicated PostgreSQL database
 - OpenAPI/Swagger documentation
 
-Parser notes:
-- Script: `document-service/parser/parse_inspection_pdf.py` (requires `pypdf==5.1.0`)
-- Test PDFs must contain selectable/extractable text — scanned image PDFs will not yield extracted fields
-- Parser environment variables (Docker image sets these automatically):
-  - `DOCUMENT_PARSER_PYTHON` — Python executable (default in Docker: `/opt/document-parser-venv/bin/python`)
-  - `DOCUMENT_PARSER_SCRIPT_PATH` — path to the parser script (default in Docker: `/app/parser/parse_inspection_pdf.py`)
-  - `DOCUMENT_PARSER_TIMEOUT_SECONDS` — kill timeout in seconds (default: `30`)
 
 Gateway routes:
 - `POST /api/documents`

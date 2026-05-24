@@ -1,0 +1,273 @@
+package com.fleet.document.service;
+
+import com.fleet.document.dto.ApproveDocumentRequest;
+import com.fleet.document.dto.ParserResultRequest;
+import com.fleet.document.dto.RejectDocumentRequest;
+import com.fleet.document.entity.ApprovedDocumentData;
+import com.fleet.document.entity.DocumentExtractionDraft;
+import com.fleet.document.entity.DocumentStatus;
+import com.fleet.document.entity.DocumentType;
+import com.fleet.document.entity.ParserStatus;
+import com.fleet.document.entity.VehicleDocument;
+import com.fleet.document.repository.ApprovedDocumentDataRepository;
+import com.fleet.document.repository.DocumentExtractionDraftRepository;
+import com.fleet.document.repository.VehicleDocumentRepository;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.math.BigDecimal;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class DocumentServiceTest {
+
+    @Mock
+    private VehicleDocumentRepository documentRepository;
+
+    @Mock
+    private DocumentExtractionDraftRepository extractionDraftRepository;
+
+    @Mock
+    private ApprovedDocumentDataRepository approvedDataRepository;
+
+    @Mock
+    private DocumentStorageService storageService;
+
+    @Mock
+    private FleetVehicleClient fleetVehicleClient;
+
+    @Mock
+    private MultipartFile multipartFile;
+
+    @InjectMocks
+    private DocumentService documentService;
+
+    private final Authentication staffAuth = new TestingAuthenticationToken(
+            new JwtPrincipal("staff", 10L, java.util.Set.of("STAFF")),
+            null,
+            "ROLE_STAFF"
+    );
+
+    private final Authentication userAuth = new TestingAuthenticationToken(
+            new JwtPrincipal("user", 20L, java.util.Set.of("USER")),
+            null,
+            "ROLE_USER"
+    );
+
+    @Test
+    void uploadPdfCreatesParsingDocument() {
+        when(fleetVehicleClient.vehicleExists(1L, "Bearer token")).thenReturn(true);
+        when(storageService.save(multipartFile)).thenReturn(new StoredDocumentFile(
+                "inspection.pdf",
+                "stored.pdf",
+                "application/pdf",
+                123L,
+                "/tmp/stored.pdf"
+        ));
+        when(documentRepository.save(any(VehicleDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(approvedDataRepository.findByDocument(any())).thenReturn(Optional.empty());
+        when(extractionDraftRepository.findByDocument(any())).thenReturn(Optional.empty());
+
+        documentService.uploadDocument(multipartFile, 1L, DocumentType.INSPECTION, "Bearer token", staffAuth);
+
+        ArgumentCaptor<VehicleDocument> captor = ArgumentCaptor.forClass(VehicleDocument.class);
+        verify(documentRepository).save(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo(DocumentStatus.PARSING);
+        assertThat(captor.getValue().getVehicleId()).isEqualTo(1L);
+    }
+
+    @Test
+    void uploadRejectsUnknownVehicle() {
+        when(fleetVehicleClient.vehicleExists(99L, "Bearer token")).thenReturn(false);
+
+        assertThatThrownBy(() -> documentService.uploadDocument(
+                multipartFile,
+                99L,
+                DocumentType.INSPECTION,
+                "Bearer token",
+                staffAuth
+        )).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Vehicle does not exist");
+    }
+
+    @Test
+    void validParserResultCreatesDraftAndNeedsReviewStatus() {
+        UUID documentId = UUID.randomUUID();
+        VehicleDocument document = document(documentId, DocumentStatus.PARSING);
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(extractionDraftRepository.findByDocument(document)).thenReturn(Optional.empty());
+        when(extractionDraftRepository.save(any(DocumentExtractionDraft.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(documentRepository.save(any(VehicleDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(approvedDataRepository.findByDocument(any())).thenReturn(Optional.empty());
+
+        documentService.receiveParserResult(documentId, new ParserResultRequest(
+                documentId,
+                ParserStatus.PARSED,
+                "INSPECTION",
+                "ITP",
+                new BigDecimal("0.91"),
+                "mock-parser",
+                "1.0",
+                Map.of("expiryDate", "2027-03-10"),
+                java.util.List.of("low contrast stamp"),
+                null,
+                null
+        ), staffAuth);
+
+        ArgumentCaptor<DocumentExtractionDraft> draftCaptor = ArgumentCaptor.forClass(DocumentExtractionDraft.class);
+        verify(extractionDraftRepository).save(draftCaptor.capture());
+        assertThat(draftCaptor.getValue().getParserStatus()).isEqualTo(ParserStatus.PARSED);
+        assertThat(document.getStatus()).isEqualTo(DocumentStatus.NEEDS_REVIEW);
+    }
+
+    @Test
+    void failedParserResultSetsParsingFailed() {
+        UUID documentId = UUID.randomUUID();
+        VehicleDocument document = document(documentId, DocumentStatus.PARSING);
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(extractionDraftRepository.findByDocument(document)).thenReturn(Optional.empty());
+        when(extractionDraftRepository.save(any(DocumentExtractionDraft.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(documentRepository.save(any(VehicleDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(approvedDataRepository.findByDocument(any())).thenReturn(Optional.empty());
+
+        documentService.receiveParserResult(documentId, new ParserResultRequest(
+                documentId,
+                ParserStatus.FAILED,
+                null,
+                null,
+                null,
+                "mock-parser",
+                "1.0",
+                null,
+                null,
+                "OCR_FAILED",
+                "Could not read PDF"
+        ), staffAuth);
+
+        assertThat(document.getStatus()).isEqualTo(DocumentStatus.PARSING_FAILED);
+    }
+
+    @Test
+    void approveNeedsReviewDocumentCreatesApprovedDataAndValidates() {
+        UUID documentId = UUID.randomUUID();
+        VehicleDocument document = document(documentId, DocumentStatus.NEEDS_REVIEW);
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(approvedDataRepository.findByDocument(document)).thenReturn(Optional.empty());
+        when(approvedDataRepository.save(any(ApprovedDocumentData.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(documentRepository.save(any(VehicleDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(extractionDraftRepository.findByDocument(any())).thenReturn(Optional.empty());
+
+        documentService.approveDocument(documentId, new ApproveDocumentRequest(
+                Map.of("expiryDate", "2027-03-10"),
+                "INSPECTION",
+                "ITP",
+                null,
+                java.time.LocalDate.of(2027, 3, 10)
+        ), staffAuth);
+
+        ArgumentCaptor<ApprovedDocumentData> approvedCaptor = ArgumentCaptor.forClass(ApprovedDocumentData.class);
+        verify(approvedDataRepository).save(approvedCaptor.capture());
+        assertThat(approvedCaptor.getValue().getVehicleId()).isEqualTo(1L);
+        assertThat(approvedCaptor.getValue().getDocumentType()).isEqualTo("INSPECTION");
+        assertThat(document.getStatus()).isEqualTo(DocumentStatus.VALIDATED);
+    }
+
+    @Test
+    void approveNonReviewDocumentIsRejected() {
+        UUID documentId = UUID.randomUUID();
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document(documentId, DocumentStatus.PARSING)));
+
+        assertThatThrownBy(() -> documentService.approveDocument(documentId, new ApproveDocumentRequest(
+                Map.of("expiryDate", "2027-03-10"),
+                "INSPECTION",
+                null,
+                null,
+                null
+        ), staffAuth)).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("NEEDS_REVIEW");
+    }
+
+    @Test
+    void rejectNeedsReviewDocumentSetsRejected() {
+        UUID documentId = UUID.randomUUID();
+        VehicleDocument document = document(documentId, DocumentStatus.NEEDS_REVIEW);
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(extractionDraftRepository.findByDocument(document)).thenReturn(Optional.empty());
+        when(extractionDraftRepository.save(any(DocumentExtractionDraft.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(documentRepository.save(any(VehicleDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(approvedDataRepository.findByDocument(any())).thenReturn(Optional.empty());
+
+        documentService.rejectDocument(documentId, new RejectDocumentRequest("Not the right vehicle"), staffAuth);
+
+        assertThat(document.getStatus()).isEqualTo(DocumentStatus.REJECTED);
+    }
+
+    @Test
+    void rejectParsingFailedDocumentSetsRejected() {
+        UUID documentId = UUID.randomUUID();
+        VehicleDocument document = document(documentId, DocumentStatus.PARSING_FAILED);
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(extractionDraftRepository.findByDocument(document)).thenReturn(Optional.empty());
+        when(extractionDraftRepository.save(any(DocumentExtractionDraft.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(documentRepository.save(any(VehicleDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(approvedDataRepository.findByDocument(any())).thenReturn(Optional.empty());
+
+        documentService.rejectDocument(documentId, new RejectDocumentRequest("Unreadable"), staffAuth);
+
+        assertThat(document.getStatus()).isEqualTo(DocumentStatus.REJECTED);
+    }
+
+    @Test
+    void staffCanSeeExtractionDraft() {
+        UUID documentId = UUID.randomUUID();
+        VehicleDocument document = document(documentId, DocumentStatus.NEEDS_REVIEW);
+        DocumentExtractionDraft draft = DocumentExtractionDraft.builder()
+                .document(document)
+                .parserStatus(ParserStatus.PARSED)
+                .extractedData(Map.of("expiryDate", "2027-03-10"))
+                .build();
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(approvedDataRepository.findByDocument(document)).thenReturn(Optional.empty());
+        when(extractionDraftRepository.findByDocument(document)).thenReturn(Optional.of(draft));
+
+        assertThat(documentService.getDocument(documentId, staffAuth).extraction()).isNotNull();
+    }
+
+    @Test
+    void userCannotSeeUnvalidatedDocument() {
+        UUID documentId = UUID.randomUUID();
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document(documentId, DocumentStatus.NEEDS_REVIEW)));
+
+        assertThatThrownBy(() -> documentService.getDocument(documentId, userAuth))
+                .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    }
+
+    private VehicleDocument document(UUID id, DocumentStatus status) {
+        VehicleDocument document = new VehicleDocument();
+        document.setId(id);
+        document.setVehicleId(1L);
+        document.setDocumentType(DocumentType.INSPECTION);
+        document.setStatus(status);
+        document.setOriginalFileName("inspection.pdf");
+        document.setStoredFileName("stored.pdf");
+        document.setContentType("application/pdf");
+        document.setFileSize(123L);
+        document.setStoragePath("/tmp/stored.pdf");
+        return document;
+    }
+}

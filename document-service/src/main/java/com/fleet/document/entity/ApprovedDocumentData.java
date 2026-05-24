@@ -22,6 +22,7 @@ import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
 
@@ -42,9 +43,22 @@ public class ApprovedDocumentData {
     @JoinColumn(name = "document_id", nullable = false, unique = true)
     private VehicleDocument document;
 
+    @Column
+    private Long vehicleId;
+
+    @Column(length = 100)
+    private String documentType;
+
+    @Column(length = 100)
+    private String subtype;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb", nullable = false)
     private Map<String, Object> approvedData;
+
+    private LocalDate validFrom;
+
+    private LocalDate validUntil;
 
     private Long approvedByUserId;
 
