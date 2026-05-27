@@ -12,8 +12,8 @@ class RoleTest {
 
     @Test
     void convertsBetweenAuthoritiesAndRoleNames() {
-        assertEquals(Role.ADMIN, Role.fromValue("ROLE_ADMIN"));
-        assertEquals(Role.USER, Role.fromAuthorities(List.of(new SimpleGrantedAuthority("ROLE_USER"))).iterator().next());
-        assertEquals(Set.of(new SimpleGrantedAuthority("ROLE_ADMIN")), Role.toAuthorities(Role.ADMIN));
+        assertEquals(Role.SUPERADMIN, Role.fromValue("ROLE_ADMIN"));
+        assertEquals(Role.EMPLOYEE, Role.fromAuthorities(List.of(new SimpleGrantedAuthority("ROLE_EMPLOYEE"))).iterator().next());
+        assertEquals(Set.of(new SimpleGrantedAuthority("ROLE_SUPERADMIN")), Role.toAuthorities(Role.SUPERADMIN));
     }
 }

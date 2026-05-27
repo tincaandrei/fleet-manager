@@ -7,7 +7,14 @@
       "Bash(Get-ChildItem -Path \"e:\\\\Users\\\\Andrei\\\\Politemnita\\\\AN4-PC\\\\licenta\\\\fleet manager\\\\frontend\" -Recurse -File)",
       "Bash(Select-Object -ExpandProperty FullName)",
       "Bash(Sort-Object)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(start \"\" \"e:/Users/Andrei/Politemnita/AN4-PC/licenta/fleet manager/design-mockups/variant1-slate-pro.html\")",
+      "Bash(start \"\" \"e:/Users/Andrei/Politemnita/AN4-PC/licenta/fleet manager/design-mockups/variant2-aurora-dashboard.html\")",
+      "Bash(start \"\" \"e:/Users/Andrei/Politemnita/AN4-PC/licenta/fleet manager/design-mockups/variant3-compact-flux.html\")",
+      "Bash(Get-Content \"e:\\\\Users\\\\Andrei\\\\Politemnita\\\\AN4-PC\\\\licenta\\\\fleet manager\\\\frontend\\\\src\\\\index.css\")",
+      "Bash(Measure-Object -Line)",
+      "PowerShell(\\(Get-Content \"e:\\\\Users\\\\Andrei\\\\Politemnita\\\\AN4-PC\\\\licenta\\\\fleet manager\\\\frontend\\\\src\\\\index.css\"\\).Count)"
     ]
   }
 }

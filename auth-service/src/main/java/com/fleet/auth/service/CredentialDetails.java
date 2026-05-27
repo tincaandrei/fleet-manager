@@ -19,11 +19,23 @@ public class CredentialDetails implements UserDetails {
     }
 
     public Role getRole() {
-        return credential.getRole().getRoleName();
+        return credential.getRole().getRoleName().canonical();
     }
 
     public Long getUserId() {
         return credential.getUserData() == null ? null : credential.getUserData().getUserId();
+    }
+
+    public Long getBusinessId() {
+        return credential.getUserData() == null || credential.getUserData().getBusiness() == null
+                ? null
+                : credential.getUserData().getBusiness().getId();
+    }
+
+    public String getBusinessName() {
+        return credential.getUserData() == null || credential.getUserData().getBusiness() == null
+                ? null
+                : credential.getUserData().getBusiness().getName();
     }
 
     @Override

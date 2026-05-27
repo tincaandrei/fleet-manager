@@ -1,5 +1,12 @@
 http:
   routers:
+    frontend:
+      rule: "PathPrefix(`/`)"
+      entryPoints:
+        - http
+      service: frontend
+      priority: 1
+
     auth-service:
       rule: "PathPrefix(`/api/auth`)"
       entryPoints:
@@ -51,6 +58,12 @@ http:
           - url: "http://document-service:8080"
         passHostHeader: true
 
+    frontend:
+      loadBalancer:
+        servers:
+          - url: "http://frontend:80"
+        passHostHeader: true
+
   middlewares:
     dashboard-auth:
       basicAuth:
@@ -71,6 +84,7 @@ http:
           - Authorization
           - Content-Type
           - X-Requested-With
+          - X-Internal-Api-Key
         accessControlAllowCredentials: true
         accessControlAllowOriginList:
           - "*"

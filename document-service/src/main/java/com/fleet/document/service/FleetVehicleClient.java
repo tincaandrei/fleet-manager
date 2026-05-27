@@ -1,12 +1,15 @@
 package com.fleet.document.service;
 
-import com.fleet.document.dto.VehicleExistsResponse;
+import com.fleet.document.dto.VehicleBasicInfoResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+
+import java.util.Arrays;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -17,19 +20,34 @@ public class FleetVehicleClient {
     @Value("${fleet.service.url}")
     private String fleetServiceUrl;
 
-    public boolean vehicleExists(Long vehicleId, String authorizationHeader) {
+    public VehicleBasicInfoResponse vehicleBasicInfo(Long vehicleId, String authorizationHeader) {
         try {
-            VehicleExistsResponse response = restClientBuilder
+            return restClientBuilder
                     .baseUrl(fleetServiceUrl)
                     .build()
                     .get()
-                    .uri("/internal/vehicles/{id}/exists", vehicleId)
+                    .uri("/internal/vehicles/{id}/basic-info", vehicleId)
                     .header(HttpHeaders.AUTHORIZATION, authorizationHeader)
                     .retrieve()
-                    .body(VehicleExistsResponse.class);
-            return response != null && response.exists();
+                    .body(VehicleBasicInfoResponse.class);
         } catch (RestClientException ex) {
-            throw new IllegalArgumentException("Could not validate vehicle existence");
+            throw new IllegalArgumentException("Vehicle does not exist or is not visible");
+        }
+    }
+
+    public List<VehicleBasicInfoResponse> activeVehicles(String authorizationHeader) {
+        try {
+            VehicleBasicInfoResponse[] response = restClientBuilder
+                    .baseUrl(fleetServiceUrl)
+                    .build()
+                    .get()
+                    .uri("/internal/vehicles/active")
+                    .header(HttpHeaders.AUTHORIZATION, authorizationHeader)
+                    .retrieve()
+                    .body(VehicleBasicInfoResponse[].class);
+            return response == null ? List.of() : Arrays.asList(response);
+        } catch (RestClientException ex) {
+            throw new IllegalArgumentException("Could not load visible vehicles");
         }
     }
 }

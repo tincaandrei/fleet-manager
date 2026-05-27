@@ -37,6 +37,10 @@ public class JwtService {
         if (userDetails instanceof CredentialDetails credentialDetails && credentialDetails.getUserId() != null) {
             claims.put("userId", credentialDetails.getUserId());
         }
+        if (userDetails instanceof CredentialDetails credentialDetails && credentialDetails.getBusinessId() != null) {
+            claims.put("businessId", credentialDetails.getBusinessId());
+            claims.put("businessName", credentialDetails.getBusinessName());
+        }
 
         return Jwts.builder()
                 .addClaims(claims)

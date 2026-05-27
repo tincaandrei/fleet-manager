@@ -1,9 +1,9 @@
 package com.fleet.document.entity;
 
 public enum DocumentType {
-    INSPECTION,
     INSURANCE,
-    INVOICE,
-    REGISTRATION,
+    TECHNICAL_INSPECTION,
+    ROAD_TAX,
+    EXPENSE_INVOICE,
     OTHER
 }

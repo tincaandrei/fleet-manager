@@ -12,6 +12,7 @@ import java.time.Instant;
 public record VehicleResponse(
         @Schema(description = "Vehicle id.", example = "1")
         Long id,
+        Long businessId,
         @Schema(description = "Unique vehicle license plate.", example = "B-123-ABC")
         String licensePlate,
         @Schema(description = "Vehicle identification number.", example = "1HGCM82633A004352")

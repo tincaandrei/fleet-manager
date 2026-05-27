@@ -46,6 +46,9 @@ public class ApprovedDocumentData {
     @Column
     private Long vehicleId;
 
+    @Column
+    private Long businessId;
+
     @Column(length = 100)
     private String documentType;
 

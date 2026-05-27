@@ -31,24 +31,24 @@ class NormalizedAuthRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        if (roleEntityRepository.findByRoleName(Role.USER).isEmpty()) {
-            roleEntityRepository.saveAndFlush(RoleEntity.builder().roleName(Role.USER).build());
+        if (roleEntityRepository.findByRoleName(Role.EMPLOYEE).isEmpty()) {
+            roleEntityRepository.saveAndFlush(RoleEntity.builder().roleName(Role.EMPLOYEE).build());
         }
-        if (roleEntityRepository.findByRoleName(Role.ADMIN).isEmpty()) {
-            roleEntityRepository.saveAndFlush(RoleEntity.builder().roleName(Role.ADMIN).build());
+        if (roleEntityRepository.findByRoleName(Role.SUPERADMIN).isEmpty()) {
+            roleEntityRepository.saveAndFlush(RoleEntity.builder().roleName(Role.SUPERADMIN).build());
         }
     }
 
     @Test
     void roleLookupByNameWorks() {
-        RoleEntity roleEntity = roleEntityRepository.findByRoleName(Role.ADMIN).orElseThrow();
+        RoleEntity roleEntity = roleEntityRepository.findByRoleName(Role.SUPERADMIN).orElseThrow();
 
-        assertEquals(Role.ADMIN, roleEntity.getRoleName());
+        assertEquals(Role.SUPERADMIN, roleEntity.getRoleName());
     }
 
     @Test
     void credentialUsernameMustBeUnique() {
-        RoleEntity userRole = roleEntityRepository.findByRoleName(Role.USER).orElseThrow();
+        RoleEntity userRole = roleEntityRepository.findByRoleName(Role.EMPLOYEE).orElseThrow();
 
         credentialRepository.saveAndFlush(Credential.builder()
                 .username("alice")
@@ -66,7 +66,7 @@ class NormalizedAuthRepositoryTest {
 
     @Test
     void userDataEmailAndCredentialLinkMustBeUnique() {
-        RoleEntity userRole = roleEntityRepository.findByRoleName(Role.USER).orElseThrow();
+        RoleEntity userRole = roleEntityRepository.findByRoleName(Role.EMPLOYEE).orElseThrow();
 
         Credential firstCredential = credentialRepository.saveAndFlush(Credential.builder()
                 .username("alice")
@@ -88,7 +88,7 @@ class NormalizedAuthRepositoryTest {
 
     @Test
     void userDataEmailMustBeUnique() {
-        RoleEntity userRole = roleEntityRepository.findByRoleName(Role.USER).orElseThrow();
+        RoleEntity userRole = roleEntityRepository.findByRoleName(Role.EMPLOYEE).orElseThrow();
 
         Credential firstCredential = credentialRepository.saveAndFlush(Credential.builder()
                 .username("alice")

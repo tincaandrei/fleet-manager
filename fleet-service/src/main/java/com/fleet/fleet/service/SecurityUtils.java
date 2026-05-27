@@ -13,12 +13,20 @@ public final class SecurityUtils {
 
     public static boolean canReadAll(Authentication authentication) {
         Set<String> roles = roles(authentication);
-        return roles.contains("ADMIN") || roles.contains("FLEET_MANAGER") || roles.contains("AUDITOR");
+        return roles.contains("SUPERADMIN") || roles.contains("BUSINESS_ADMIN");
+    }
+
+    public static boolean isSuperadmin(Authentication authentication) {
+        return roles(authentication).contains("SUPERADMIN");
+    }
+
+    public static boolean isBusinessAdmin(Authentication authentication) {
+        return roles(authentication).contains("BUSINESS_ADMIN");
     }
 
     public static boolean isEmployeeOnly(Authentication authentication) {
         Set<String> roles = roles(authentication);
-        return !canReadAll(authentication) && (roles.contains("EMPLOYEE") || roles.contains("USER"));
+        return !canReadAll(authentication) && roles.contains("EMPLOYEE");
     }
 
     public static Long currentUserId(Authentication authentication) {
@@ -28,6 +36,17 @@ public final class SecurityUtils {
         Object principal = authentication.getPrincipal();
         if (principal instanceof JwtPrincipal jwtPrincipal) {
             return jwtPrincipal.userId();
+        }
+        return null;
+    }
+
+    public static Long currentBusinessId(Authentication authentication) {
+        if (authentication == null) {
+            return null;
+        }
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof JwtPrincipal jwtPrincipal) {
+            return jwtPrincipal.businessId();
         }
         return null;
     }

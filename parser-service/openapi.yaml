@@ -1,0 +1,227 @@
+openapi: 3.0.1
+info:
+  title: Fleet Manager Parser Service API
+  description: Document parser service APIs for Fleet Manager.
+  contact:
+    name: Fleet Manager Team
+  version: 1.0.0
+servers:
+- url: /api/parser
+  description: Parser service through Traefik
+- url: /
+  description: Direct parser-service local port
+tags:
+- name: Parser
+  description: Internal document parser APIs.
+paths:
+  /documents/extract:
+    post:
+      tags:
+      - Parser
+      summary: Extract structured data from a PDF
+      description: Internal endpoint called by document-service. Upload a PDF and
+        receive normalized parser draft data.
+      operationId: extract
+      parameters:
+      - name: X-Internal-Api-Key
+        in: header
+        description: Internal API key shared with document-service.
+        required: true
+        example: dev-parser-internal-api-key-change-me-32
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              required:
+              - documentId
+              - file
+              - vehicleId
+              type: object
+              properties:
+                file:
+                  type: string
+                  description: PDF document to parse
+                  format: binary
+                documentId:
+                  type: string
+                  description: Document identifier from document-service
+                vehicleId:
+                  type: string
+                  description: Vehicle identifier from document-service
+                declaredDocumentType:
+                  type: string
+                  description: "Optional declared document type, e.g. RCA, ITP, ROVINIETA,\
+                    \ EXPENSE_INVOICE"
+                originalFileName:
+                  type: string
+                  description: Original uploaded file name
+      responses:
+        "401":
+          description: Invalid internal API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParserExtractionResponse"
+        "200":
+          description: Extraction completed or failed gracefully inside the stable
+            parser response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParserExtractionResponse"
+              example:
+                documentId: 00000000-0000-0000-0000-000000000001
+                parserStatus: PARSED
+                detectedDocumentType: INSURANCE
+                detectedSubtype: RCA
+                confidence: 0.86
+                parserName: ollama-document-parser
+                parserVersion: 1.0.0
+                extractionMethod: PDF_TEXT
+                extractedData:
+                  policyNumber: RO/...
+                  licensePlate: B123XYZ
+                  vin: WVWZZZ1KZAW123456
+                  validFrom: 2026-01-01
+                  validUntil: 2027-01-01
+                warnings: []
+      security:
+      - internalApiKey: []
+  /me:
+    get:
+      tags:
+      - Parser
+      summary: Current JWT principal
+      description: Debug endpoint for JWT wiring.
+      operationId: me
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+      security:
+      - bearerAuth: []
+  /health:
+    get:
+      tags:
+      - Parser
+      summary: Health check
+      description: Returns parser-service status.
+      operationId: health
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+components:
+  schemas:
+    JsonNode:
+      type: object
+      description: Type-specific extracted data as flexible JSON.
+    ParserExtractionResponse:
+      type: object
+      properties:
+        documentId:
+          type: string
+          example: 00000000-0000-0000-0000-000000000001
+        parserStatus:
+          type: string
+          example: PARSED
+          enum:
+          - PARSED
+          - FAILED
+        detectedDocumentType:
+          type: string
+          example: INSURANCE
+          enum:
+          - INSURANCE
+          - TECHNICAL_INSPECTION
+          - VEHICLE_IDENTITY_CARD
+          - ROAD_TAX
+          - EXPENSE_INVOICE
+          - OTHER
+        detectedSubtype:
+          type: string
+          example: RCA
+          enum:
+          - RCA
+          - ITP
+          - CIV
+          - ROVINIETA
+          - UNKNOWN
+        confidence:
+          type: number
+          format: double
+          example: 0.86
+        parserName:
+          type: string
+          example: ollama-document-parser
+        parserVersion:
+          type: string
+          example: 1.0.0
+        extractionMethod:
+          type: string
+          example: PDF_TEXT
+          enum:
+          - PDF_TEXT
+          - OCR
+          - PDF_TEXT_AND_OCR
+        extractedData:
+          $ref: "#/components/schemas/JsonNode"
+        warnings:
+          type: array
+          items:
+            type: string
+        errorCode:
+          type: string
+          example: TEXT_EXTRACTION_FAILED
+          enum:
+          - INVALID_REQUEST
+          - UNSUPPORTED_FILE_TYPE
+          - TEXT_EXTRACTION_FAILED
+          - OCR_FAILED
+          - DOCUMENT_TYPE_DETECTION_FAILED
+          - OLLAMA_UNAVAILABLE
+          - OLLAMA_TIMEOUT
+          - OLLAMA_INVALID_RESPONSE
+          - EXTRACTION_VALIDATION_FAILED
+          - INTERNAL_ERROR
+        errorMessage:
+          type: string
+          example: Could not extract readable text from PDF
+      description: Stable parser response returned to document-service.
+    MeResponse:
+      type: object
+      properties:
+        username:
+          type: string
+        userId:
+          type: integer
+          format: int64
+        roles:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+    HealthResponse:
+      type: object
+      properties:
+        service:
+          type: string
+        status:
+          type: string
+        ollamaBaseUrl:
+          type: string
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    internalApiKey:
+      type: apiKey
+      name: X-Internal-Api-Key
+      in: header

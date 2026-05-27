@@ -29,6 +29,7 @@ public class JwtService {
     private static final String ROLES_CLAIM = "roles";
     private static final String ROLE_CLAIM = "role";
     private static final String USER_ID_CLAIM = "userId";
+    private static final String BUSINESS_ID_CLAIM = "businessId";
 
     private final JwtProperties jwtProperties;
 
@@ -37,6 +38,7 @@ public class JwtService {
         return new JwtPrincipal(
                 claims.getSubject(),
                 extractUserId(claims),
+                extractBusinessId(claims),
                 extractRoles(claims)
         );
     }
@@ -49,7 +51,13 @@ public class JwtService {
         return roles.stream()
                 .flatMap(role -> {
                     if ("USER".equals(role)) {
-                        return List.of(role, "EMPLOYEE").stream();
+                        return List.of("EMPLOYEE").stream();
+                    }
+                    if ("ADMIN".equals(role)) {
+                        return List.of("SUPERADMIN").stream();
+                    }
+                    if ("STAFF".equals(role)) {
+                        return List.of("BUSINESS_ADMIN").stream();
                     }
                     return List.of(role).stream();
                 })
@@ -124,6 +132,21 @@ public class JwtService {
         if (StringUtils.hasText(subject)) {
             try {
                 return Long.parseLong(subject);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private Long extractBusinessId(Claims claims) {
+        Object claim = claims.get(BUSINESS_ID_CLAIM);
+        if (claim instanceof Number number) {
+            return number.longValue();
+        }
+        if (claim instanceof String value && StringUtils.hasText(value)) {
+            try {
+                return Long.parseLong(value);
             } catch (NumberFormatException ignored) {
                 return null;
             }

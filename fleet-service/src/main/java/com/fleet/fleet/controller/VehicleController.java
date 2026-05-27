@@ -138,9 +138,10 @@ public class VehicleController {
                     required = true,
                     content = @Content(schema = @Schema(implementation = VehicleRequest.class), examples = @ExampleObject(value = VEHICLE_REQUEST_EXAMPLE))
             )
-            @Valid @RequestBody VehicleRequest request
+            @Valid @RequestBody VehicleRequest request,
+            Authentication authentication
     ) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(vehicleService.create(request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(vehicleService.create(request, authentication));
     }
 
     @GetMapping("/vehicles")
@@ -169,6 +170,8 @@ public class VehicleController {
             @RequestParam(required = false) Long assignedUserId,
             @Parameter(description = "Filter by exact license plate.", example = "B-123-ABC")
             @RequestParam(required = false) String licensePlate,
+            @Parameter(description = "Filter by business id. SUPERADMIN only.", example = "1")
+            @RequestParam(required = false) Long businessId,
             Authentication authentication
     ) {
         return ResponseEntity.ok(vehicleService.findAll(
@@ -179,6 +182,7 @@ public class VehicleController {
                 department,
                 assignedUserId,
                 licensePlate,
+                businessId,
                 authentication
         ));
     }
@@ -221,9 +225,10 @@ public class VehicleController {
                     required = true,
                     content = @Content(schema = @Schema(implementation = VehicleRequest.class), examples = @ExampleObject(value = VEHICLE_REQUEST_EXAMPLE))
             )
-            @Valid @RequestBody VehicleRequest request
+            @Valid @RequestBody VehicleRequest request,
+            Authentication authentication
     ) {
-        return ResponseEntity.ok(vehicleService.update(id, request));
+        return ResponseEntity.ok(vehicleService.update(id, request, authentication));
     }
 
     @PatchMapping("/vehicles/{id}/status")
@@ -245,9 +250,10 @@ public class VehicleController {
                     required = true,
                     content = @Content(schema = @Schema(implementation = VehicleStatusRequest.class), examples = @ExampleObject(value = STATUS_REQUEST_EXAMPLE))
             )
-            @Valid @RequestBody VehicleStatusRequest request
+            @Valid @RequestBody VehicleStatusRequest request,
+            Authentication authentication
     ) {
-        return ResponseEntity.ok(vehicleService.changeStatus(id, request.status()));
+        return ResponseEntity.ok(vehicleService.changeStatus(id, request.status(), authentication));
     }
 
     @PatchMapping("/vehicles/{id}/assignment")
@@ -269,9 +275,10 @@ public class VehicleController {
                     required = true,
                     content = @Content(schema = @Schema(implementation = VehicleAssignmentRequest.class), examples = @ExampleObject(value = ASSIGNMENT_REQUEST_EXAMPLE))
             )
-            @Valid @RequestBody VehicleAssignmentRequest request
+            @Valid @RequestBody VehicleAssignmentRequest request,
+            Authentication authentication
     ) {
-        return ResponseEntity.ok(vehicleService.assign(id, request));
+        return ResponseEntity.ok(vehicleService.assign(id, request, authentication));
     }
 
     @DeleteMapping("/vehicles/{id}")
@@ -286,9 +293,10 @@ public class VehicleController {
             @ApiResponse(responseCode = "404", description = "Vehicle was not found")
     })
     public ResponseEntity<Void> delete(
-            @Parameter(description = "Vehicle id.", example = "1") @PathVariable Long id
+            @Parameter(description = "Vehicle id.", example = "1") @PathVariable Long id,
+            Authentication authentication
     ) {
-        vehicleService.delete(id);
+        vehicleService.delete(id, authentication);
         return ResponseEntity.noContent().build();
     }
 }

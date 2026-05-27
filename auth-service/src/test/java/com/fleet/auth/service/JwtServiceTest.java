@@ -20,13 +20,13 @@ class JwtServiceTest {
         JwtService jwtService = new JwtService(properties);
         UserDetails userDetails = User.withUsername("alice")
                 .password("ignored")
-                .authorities(Role.toAuthorities(Role.ADMIN))
+                .authorities(Role.toAuthorities(Role.SUPERADMIN))
                 .build();
 
         String token = jwtService.generateToken(userDetails);
 
         assertEquals("alice", jwtService.extractUsername(token));
-        assertEquals(Role.ADMIN, jwtService.extractRole(token));
+        assertEquals(Role.SUPERADMIN, jwtService.extractRole(token));
         assertTrue(jwtService.validateToken(token));
     }
 }

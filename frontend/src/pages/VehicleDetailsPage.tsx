@@ -5,8 +5,9 @@ import type { Vehicle } from '../types/vehicle';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../auth/AuthContext';
 import VehicleDocumentsSection from '../components/VehicleDocumentsSection';
+import ComplianceSection from '../components/ComplianceSection';
 
-type Tab = 'details' | 'documents';
+type Tab = 'details' | 'documents' | 'compliance';
 
 export default function VehicleDetailsPage() {
   const { id } = useParams<{ id: string }>();
@@ -19,9 +20,9 @@ export default function VehicleDetailsPage() {
   useEffect(() => {
     getVehicle(Number(id))
       .then((res) => setVehicle(res.data))
-      .catch((err) => {
-        if (err.response?.status === 403) setError('Access denied.');
-        else setError(err.response?.data?.message ?? 'Failed to load vehicle.');
+      .catch((err: unknown) => {
+        const e = err as { response?: { status?: number; data?: { message?: string } } };
+        setError(e.response?.data?.message ?? 'Failed to load vehicle.');
       });
   }, [id]);
 
@@ -30,9 +31,9 @@ export default function VehicleDetailsPage() {
     try {
       await deleteVehicle(Number(id));
       navigate('/vehicles');
-    } catch (err: any) {
-      if (err.response?.status === 403) setError('Access denied.');
-      else setError(err.response?.data?.message ?? 'Failed to delete vehicle.');
+    } catch (err: unknown) {
+      const e = err as { response?: { status?: number; data?: { message?: string } } };
+      setError(e.response?.data?.message ?? 'Failed to delete vehicle.');
     }
   };
 
@@ -71,6 +72,12 @@ export default function VehicleDetailsPage() {
               >
                 Documents
               </button>
+              <button
+                className={`vehicle-tab${activeTab === 'compliance' ? ' vehicle-tab--active' : ''}`}
+                onClick={() => setActiveTab('compliance')}
+              >
+                Compliance
+              </button>
             </nav>
 
             {activeTab === 'details' && (
@@ -90,6 +97,9 @@ export default function VehicleDetailsPage() {
                   <tr><th>Assigned Driver</th><td>{vehicle.assignedDriverName || '—'}</td></tr>
                   <tr><th>Assigned User ID</th><td>{vehicle.assignedUserId ?? '—'}</td></tr>
                   <tr><th>Mileage</th><td>{vehicle.currentMileage.toLocaleString()} km</td></tr>
+                  {vehicle.businessId != null && (
+                    <tr><th>Business ID</th><td>{vehicle.businessId}</td></tr>
+                  )}
                   <tr><th>Created</th><td>{new Date(vehicle.createdAt).toLocaleString()}</td></tr>
                   <tr><th>Updated</th><td>{new Date(vehicle.updatedAt).toLocaleString()}</td></tr>
                 </tbody>
@@ -98,6 +108,10 @@ export default function VehicleDetailsPage() {
 
             {activeTab === 'documents' && (
               <VehicleDocumentsSection vehicleId={vehicle.id} />
+            )}
+
+            {activeTab === 'compliance' && (
+              <ComplianceSection vehicleId={vehicle.id} />
             )}
           </>
         )}

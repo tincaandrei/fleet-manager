@@ -15,6 +15,7 @@ public final class VehicleSpecifications {
 
     public static Specification<Vehicle> filterBy(
             VehicleStatus status,
+            Long businessId,
             VehicleType vehicleType,
             FuelType fuelType,
             OwnershipType ownershipType,
@@ -24,6 +25,7 @@ public final class VehicleSpecifications {
     ) {
         return Specification
                 .where(equal("status", status))
+                .and(equal("businessId", businessId))
                 .and(equal("vehicleType", vehicleType))
                 .and(equal("fuelType", fuelType))
                 .and(equal("ownershipType", ownershipType))

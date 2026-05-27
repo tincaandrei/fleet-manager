@@ -95,7 +95,7 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$.email").value("alice@example.com"))
                 .andExpect(jsonPath("$.phone").value("+40123456789"))
                 .andExpect(jsonPath("$.address").value("Main Street 1"))
-                .andExpect(jsonPath("$.role").value("USER"))
+                .andExpect(jsonPath("$.role").value("EMPLOYEE"))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
@@ -106,18 +106,18 @@ class AuthIntegrationTest {
         Credential credential = credentialRepository.findByUsername("alice").orElseThrow();
         UserData userData = userDataRepository.findByEmail("alice@example.com").orElseThrow();
         assertEquals(userData.getCredential().getCredentialId(), credential.getCredentialId());
-        assertEquals(Role.USER, credential.getRole().getRoleName());
+        assertEquals(Role.EMPLOYEE, credential.getRole().getRoleName());
         assertTrue(passwordEncoder.matches("password123", credential.getPasswordHash()));
     }
 
     @Test
     void loginUsesUsernameOnlyAndIssuesSingleRoleToken() throws Exception {
-        createUser("alice", "alice@example.com", "password123", Role.USER, null, null);
+        createUser("alice", "alice@example.com", "password123", Role.EMPLOYEE, null, null);
 
         String token = login("alice", "password123");
 
         assertEquals("alice", jwtService.extractUsername(token));
-        assertEquals(Role.USER, jwtService.extractRole(token));
+        assertEquals(Role.EMPLOYEE, jwtService.extractRole(token));
 
         mockMvc.perform(post("/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -133,7 +133,7 @@ class AuthIntegrationTest {
 
     @Test
     void usersMeRequiresTokenAndReturnsLinkedProfileData() throws Exception {
-        createUser("alice", "alice@example.com", "password123", Role.USER, "+40123456789", "Main Street 1");
+        createUser("alice", "alice@example.com", "password123", Role.EMPLOYEE, "+40123456789", "Main Street 1");
 
         mockMvc.perform(get("/users/me"))
                 .andExpect(status().isUnauthorized())
@@ -148,7 +148,7 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$.email").value("alice@example.com"))
                 .andExpect(jsonPath("$.phone").value("+40123456789"))
                 .andExpect(jsonPath("$.address").value("Main Street 1"))
-                .andExpect(jsonPath("$.role").value("USER"));
+                .andExpect(jsonPath("$.role").value("EMPLOYEE"));
     }
 
     @Test
@@ -170,13 +170,13 @@ class AuthIntegrationTest {
         Credential adminCredential = credentialRepository.findByUsername("admin").orElseThrow();
         UserData adminProfile = userDataRepository.findByEmail("admin@example.com").orElseThrow();
 
-        assertEquals(Role.ADMIN, adminCredential.getRole().getRoleName());
+        assertEquals(Role.SUPERADMIN, adminCredential.getRole().getRoleName());
         assertEquals(adminCredential.getCredentialId(), adminProfile.getCredential().getCredentialId());
     }
 
     @Test
     void adminEndpointReturnsForbiddenForUserToken() throws Exception {
-        UserData targetUser = createUser("alice", "alice@example.com", "password123", Role.USER, null, null);
+        UserData targetUser = createUser("alice", "alice@example.com", "password123", Role.EMPLOYEE, null, null);
         String token = login("alice", "password123");
 
         mockMvc.perform(put("/admin/users/{id}/roles", targetUser.getUserId())
@@ -184,7 +184,7 @@ class AuthIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "role": "ADMIN"
+                                  "role": "SUPERADMIN"
                                 }
                                 """))
                 .andExpect(status().isForbidden())
@@ -193,7 +193,7 @@ class AuthIntegrationTest {
 
     @Test
     void adminEndpointUpdatesCredentialRoleAndPersistsIt() throws Exception {
-        UserData targetUser = createUser("alice", "alice@example.com", "password123", Role.USER, null, null);
+        UserData targetUser = createUser("alice", "alice@example.com", "password123", Role.EMPLOYEE, null, null);
         String adminToken = login("admin", "admin123");
 
         mockMvc.perform(put("/admin/users/{id}/roles", targetUser.getUserId())
@@ -201,21 +201,21 @@ class AuthIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "role": "ADMIN"
+                                  "role": "SUPERADMIN"
                                 }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.username").value("alice"))
-                .andExpect(jsonPath("$.role").value("ADMIN"));
+                .andExpect(jsonPath("$.role").value("SUPERADMIN"));
 
         Credential updatedCredential = credentialRepository.findByUsername("alice").orElseThrow();
-        assertEquals(Role.ADMIN, updatedCredential.getRole().getRoleName());
+        assertEquals(Role.SUPERADMIN, updatedCredential.getRole().getRoleName());
     }
 
     @Test
     void roleChangesApplyAfterReloginNotToExistingTokens() throws Exception {
-        UserData promotedUser = createUser("alice", "alice@example.com", "password123", Role.USER, null, null);
-        UserData targetUser = createUser("charlie", "charlie@example.com", "password123", Role.USER, null, null);
+        UserData promotedUser = createUser("alice", "alice@example.com", "password123", Role.EMPLOYEE, null, null);
+        UserData targetUser = createUser("charlie", "charlie@example.com", "password123", Role.EMPLOYEE, null, null);
 
         String oldUserToken = login("alice", "password123");
         String adminToken = login("admin", "admin123");
@@ -225,7 +225,7 @@ class AuthIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "role": "ADMIN"
+                                  "role": "SUPERADMIN"
                                 }
                                 """))
                 .andExpect(status().isOk());
@@ -235,7 +235,7 @@ class AuthIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "role": "ADMIN"
+                                  "role": "SUPERADMIN"
                                 }
                                 """))
                 .andExpect(status().isForbidden());
@@ -247,7 +247,7 @@ class AuthIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "role": "ADMIN"
+                                  "role": "SUPERADMIN"
                                 }
                                 """))
                 .andExpect(status().isOk());

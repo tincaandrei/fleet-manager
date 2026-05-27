@@ -16,6 +16,8 @@ public record MeResponse(
         @Schema(description = "Optional address.", example = "Main Street 1", nullable = true)
         String address,
         @Schema(description = "Current user role.", example = "USER")
-        Role role
+        Role role,
+        Long businessId,
+        String businessName
 ) {
 }

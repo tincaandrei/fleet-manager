@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record VehicleExistsResponse(
         @Schema(description = "Vehicle id that was checked.", example = "1")
         Long id,
+        Long businessId,
         @Schema(description = "Whether the vehicle exists.", example = "true")
         boolean exists
 ) {

@@ -11,7 +11,9 @@ import java.util.UUID;
 public record DocumentResponse(
         UUID id,
         Long vehicleId,
+        Long businessId,
         DocumentType documentType,
+        String documentSubtype,
         DocumentStatus status,
         String originalFileName,
         String storedFileName,

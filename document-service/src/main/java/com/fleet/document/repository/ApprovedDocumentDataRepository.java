@@ -17,5 +17,7 @@ public interface ApprovedDocumentDataRepository extends JpaRepository<ApprovedDo
 
     List<ApprovedDocumentData> findByVehicleIdOrderByValidUntilAscCreatedAtDesc(Long vehicleId);
 
+    List<ApprovedDocumentData> findByVehicleIdAndBusinessIdOrderByValidUntilAscCreatedAtDesc(Long vehicleId, Long businessId);
+
     List<ApprovedDocumentData> findByValidUntilBefore(LocalDate date);
 }

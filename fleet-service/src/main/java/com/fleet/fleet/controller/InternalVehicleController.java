@@ -17,7 +17,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.security.core.Authentication;
 
 import java.util.List;
 
@@ -73,9 +75,10 @@ public class InternalVehicleController {
             @ApiResponse(responseCode = "403", description = "Role is not allowed to use internal vehicle lookups")
     })
     public ResponseEntity<VehicleExistsResponse> exists(
-            @Parameter(description = "Vehicle id to check.", example = "1") @PathVariable Long id
+            @Parameter(description = "Vehicle id to check.", example = "1") @PathVariable Long id,
+            Authentication authentication
     ) {
-        return ResponseEntity.ok(vehicleService.exists(id));
+        return ResponseEntity.ok(vehicleService.exists(id, authentication));
     }
 
     @GetMapping("/internal/vehicles/{id}/basic-info")
@@ -90,9 +93,10 @@ public class InternalVehicleController {
             @ApiResponse(responseCode = "404", description = "Vehicle was not found")
     })
     public ResponseEntity<VehicleBasicInfoResponse> basicInfo(
-            @Parameter(description = "Vehicle id.", example = "1") @PathVariable Long id
+            @Parameter(description = "Vehicle id.", example = "1") @PathVariable Long id,
+            Authentication authentication
     ) {
-        return ResponseEntity.ok(vehicleService.basicInfo(id));
+        return ResponseEntity.ok(vehicleService.basicInfo(id, authentication));
     }
 
     @GetMapping("/internal/vehicles/active")
@@ -105,7 +109,10 @@ public class InternalVehicleController {
             @ApiResponse(responseCode = "401", description = "JWT token is missing or invalid"),
             @ApiResponse(responseCode = "403", description = "Role is not allowed to use internal vehicle lookups")
     })
-    public ResponseEntity<List<VehicleBasicInfoResponse>> activeVehicles() {
-        return ResponseEntity.ok(vehicleService.activeVehicles());
+    public ResponseEntity<List<VehicleBasicInfoResponse>> activeVehicles(
+            @RequestParam(required = false) Long businessId,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(vehicleService.activeVehicles(businessId, authentication));
     }
 }

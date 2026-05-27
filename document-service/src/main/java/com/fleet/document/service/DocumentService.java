@@ -3,11 +3,15 @@ package com.fleet.document.service;
 import com.fleet.document.dto.ApproveDocumentRequest;
 import com.fleet.document.dto.ApprovedDocumentDataResponse;
 import com.fleet.document.dto.DocumentExtractionResponse;
+import com.fleet.document.dto.DocumentInfoFolderResponse;
 import com.fleet.document.dto.DocumentResponse;
 import com.fleet.document.dto.ParserResultRequest;
 import com.fleet.document.dto.RejectDocumentRequest;
 import com.fleet.document.dto.ReviewDecision;
 import com.fleet.document.dto.ReviewDocumentRequest;
+import com.fleet.document.dto.VehicleAlertGroupResponse;
+import com.fleet.document.dto.VehicleBasicInfoResponse;
+import com.fleet.document.dto.VehicleDocumentAttributeResponse;
 import com.fleet.document.entity.ApprovedDataStatus;
 import com.fleet.document.entity.ApprovedDocumentData;
 import com.fleet.document.entity.DocumentExtractionDraft;
@@ -20,6 +24,7 @@ import com.fleet.document.repository.ApprovedDocumentDataRepository;
 import com.fleet.document.repository.DocumentExtractionDraftRepository;
 import com.fleet.document.repository.VehicleDocumentRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
@@ -30,13 +35,18 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DocumentService {
 
     private final VehicleDocumentRepository documentRepository;
@@ -44,6 +54,8 @@ public class DocumentService {
     private final ApprovedDocumentDataRepository approvedDataRepository;
     private final DocumentStorageService storageService;
     private final FleetVehicleClient fleetVehicleClient;
+    private final DocumentParsingService documentParsingService;
+    private final VehicleDocumentAttributeService vehicleDocumentAttributeService;
 
     private static final Set<DocumentStatus> REJECTABLE_STATUSES = EnumSet.of(
             DocumentStatus.NEEDS_REVIEW,
@@ -53,29 +65,29 @@ public class DocumentService {
     @Transactional
     public DocumentResponse upload(MultipartFile file,
                                    Long vehicleId,
-                                   DocumentType documentType,
                                    String authorizationHeader,
                                    Authentication authentication) {
-        return uploadDocument(file, vehicleId, documentType, authorizationHeader, authentication);
+        return uploadDocument(file, vehicleId, authorizationHeader, authentication);
     }
 
     @Transactional
     public DocumentResponse uploadDocument(MultipartFile file,
                                            Long vehicleId,
-                                           DocumentType declaredDocumentType,
                                            String authorizationHeader,
                                            Authentication authentication) {
         if (vehicleId == null) {
             throw new IllegalArgumentException("Vehicle id is required");
         }
-        if (!fleetVehicleClient.vehicleExists(vehicleId, authorizationHeader)) {
+        VehicleBasicInfoResponse vehicle = fleetVehicleClient.vehicleBasicInfo(vehicleId, authorizationHeader);
+        if (vehicle == null || vehicle.businessId() == null) {
             throw new IllegalArgumentException("Vehicle does not exist: " + vehicleId);
         }
 
         StoredDocumentFile storedFile = storageService.save(file);
         VehicleDocument document = VehicleDocument.builder()
                 .vehicleId(vehicleId)
-                .documentType(declaredDocumentType)
+                .businessId(vehicle.businessId())
+                .documentType(DocumentType.OTHER)
                 .status(DocumentStatus.PARSING)
                 .originalFileName(storedFile.originalFileName())
                 .storedFileName(storedFile.storedFileName())
@@ -84,7 +96,34 @@ public class DocumentService {
                 .storagePath(storedFile.storagePath())
                 .uploadedByUserId(SecurityUtils.currentUserId(authentication))
                 .build();
-        return toResponse(documentRepository.save(document), SecurityUtils.canReview(authentication));
+        VehicleDocument savedDocument = documentRepository.save(document);
+        ParserResultRequest parserResult = requestParserExtraction(savedDocument);
+        if (parserResult != null) {
+            applyParserResult(savedDocument, parserResult);
+            savedDocument = documentRepository.save(savedDocument);
+        }
+        return toResponse(savedDocument, SecurityUtils.canReview(authentication));
+    }
+
+    private ParserResultRequest requestParserExtraction(VehicleDocument document) {
+        try {
+            return documentParsingService.parse(document);
+        } catch (RuntimeException ex) {
+            log.warn("Document parser request failed for document {}", document.getId(), ex);
+            return new ParserResultRequest(
+                    document.getId(),
+                    ParserStatus.FAILED,
+                    null,
+                    null,
+                    null,
+                    "document-service-ollama-parser",
+                    null,
+                    null,
+                    List.of("Automatic parsing failed. The document can be reviewed manually."),
+                    "PARSER_REQUEST_FAILED",
+                    "Could not parse document"
+            );
+        }
     }
 
     @Transactional
@@ -98,37 +137,26 @@ public class DocumentService {
             throw new IllegalArgumentException("Parser results can only be received for PARSING documents");
         }
 
-        DocumentExtractionDraft draft = extractionDraftRepository.findByDocument(document)
-                .orElseGet(() -> DocumentExtractionDraft.builder().document(document).build());
-        applyParserMetadata(draft, request);
-
-        if (request.parserStatus() == ParserStatus.PARSED && parserResultIsValid(request)) {
-            draft.setParserStatus(ParserStatus.PARSED);
-            extractionDraftRepository.save(draft);
-            document.setStatus(DocumentStatus.NEEDS_REVIEW);
-        } else {
-            draft.setParserStatus(request.parserStatus() == null ? ParserStatus.FAILED : request.parserStatus());
-            if (draft.getParserStatus() == ParserStatus.PARSED) {
-                draft.setErrorCode("INVALID_PARSER_RESULT");
-                draft.setErrorMessage("Parsed result must include extracted data and confidence between 0 and 1 when present");
-            }
-            extractionDraftRepository.save(draft);
-            document.setStatus(DocumentStatus.PARSING_FAILED);
-        }
+        applyParserResult(document, request);
 
         return toResponse(documentRepository.save(document), SecurityUtils.canReview(authentication));
     }
 
     @Transactional(readOnly = true)
-    public List<DocumentResponse> listByVehicle(Long vehicleId, Authentication authentication) {
+    public List<DocumentResponse> listByVehicle(Long vehicleId, String authorizationHeader, Authentication authentication) {
         if (vehicleId == null) {
             throw new IllegalArgumentException("Vehicle id is required");
         }
+        assertVehicleVisible(vehicleId, authorizationHeader);
         boolean reviewer = SecurityUtils.canReview(authentication);
+        Long businessId = SecurityUtils.currentBusinessId(authentication);
         List<VehicleDocument> documents = reviewer
                 ? documentRepository.findByVehicleIdOrderByCreatedAtDesc(vehicleId)
                 : documentRepository.findByVehicleIdAndStatusOrderByCreatedAtDesc(vehicleId, DocumentStatus.VALIDATED);
         return documents.stream()
+                .filter(document -> SecurityUtils.isSuperadmin(authentication)
+                        || businessId == null
+                        || businessId.equals(document.getBusinessId()))
                 .map(document -> toResponse(document, reviewer))
                 .toList();
     }
@@ -139,9 +167,26 @@ public class DocumentService {
     }
 
     @Transactional(readOnly = true)
+    public DocumentResponse getById(UUID id, String authorizationHeader, Authentication authentication) {
+        return getDocument(id, authorizationHeader, authentication);
+    }
+
+    @Transactional(readOnly = true)
     public DocumentResponse getDocument(UUID id, Authentication authentication) {
         VehicleDocument document = getDocument(id);
         boolean reviewer = SecurityUtils.canReview(authentication);
+        assertCanReadDocument(document, authentication);
+        if (!reviewer && document.getStatus() != DocumentStatus.VALIDATED) {
+            throw new AccessDeniedException("Access denied");
+        }
+        return toResponse(document, reviewer);
+    }
+
+    @Transactional(readOnly = true)
+    public DocumentResponse getDocument(UUID id, String authorizationHeader, Authentication authentication) {
+        VehicleDocument document = getDocument(id);
+        boolean reviewer = SecurityUtils.canReview(authentication);
+        assertCanReadDocument(document, authentication, authorizationHeader);
         if (!reviewer && document.getStatus() != DocumentStatus.VALIDATED) {
             throw new AccessDeniedException("Access denied");
         }
@@ -155,8 +200,22 @@ public class DocumentService {
     }
 
     @Transactional(readOnly = true)
+    public Resource download(UUID id, String authorizationHeader, Authentication authentication) {
+        VehicleDocument document = getDocument(id);
+        assertCanReadDocument(document, authentication, authorizationHeader);
+        return storageService.load(document.getStoragePath());
+    }
+
+    @Transactional(readOnly = true)
     public VehicleDocument getDownloadMetadata(UUID id) {
         return getDocument(id);
+    }
+
+    @Transactional(readOnly = true)
+    public VehicleDocument getDownloadMetadata(UUID id, String authorizationHeader, Authentication authentication) {
+        VehicleDocument document = getDocument(id);
+        assertCanReadDocument(document, authentication, authorizationHeader);
+        return document;
     }
 
     @Transactional(readOnly = true)
@@ -167,7 +226,11 @@ public class DocumentService {
     @Transactional(readOnly = true)
     public List<DocumentResponse> reviewQueue(Authentication authentication) {
         requireReviewer(authentication);
-        return documentRepository.findByStatusOrderByCreatedAtAsc(DocumentStatus.NEEDS_REVIEW).stream()
+        Long businessId = SecurityUtils.currentBusinessId(authentication);
+        List<VehicleDocument> queue = SecurityUtils.isSuperadmin(authentication)
+                ? documentRepository.findByStatusOrderByCreatedAtAsc(DocumentStatus.NEEDS_REVIEW)
+                : documentRepository.findByBusinessIdAndStatusOrderByCreatedAtAsc(businessId, DocumentStatus.NEEDS_REVIEW);
+        return queue.stream()
                 .map(document -> toResponse(document, true))
                 .toList();
     }
@@ -176,10 +239,11 @@ public class DocumentService {
     public DocumentResponse review(UUID id, ReviewDocumentRequest request, Authentication authentication) {
         requireReviewer(authentication);
         if (request.decision() == ReviewDecision.APPROVE) {
+            VehicleDocument document = getDocument(id);
             return approveDocument(id, new ApproveDocumentRequest(
                     request.approvedData(),
-                    documentTypeFromReviewData(request.approvedData()),
-                    subtypeFromReviewData(request.approvedData()),
+                    documentTypeFromReviewData(document, request.approvedData()),
+                    subtypeFromReviewData(document, request.approvedData()),
                     null,
                     null
             ), authentication);
@@ -194,6 +258,7 @@ public class DocumentService {
     public DocumentResponse approveDocument(UUID id, ApproveDocumentRequest request, Authentication authentication) {
         requireReviewer(authentication);
         VehicleDocument document = getDocument(id);
+        assertCanReviewDocument(document, authentication);
         if (document.getStatus() != DocumentStatus.NEEDS_REVIEW) {
             throw new IllegalArgumentException("Only documents with NEEDS_REVIEW status can be approved");
         }
@@ -206,17 +271,22 @@ public class DocumentService {
 
         ApprovedDocumentData approvedData = approvedDataRepository.findByDocument(document)
                 .orElseGet(() -> ApprovedDocumentData.builder().document(document).build());
+        LocalDate validFrom = firstDate(request.validFrom(), request.approvedData(), "validFrom", "startDate");
+        LocalDate validUntil = firstDate(request.validUntil(), request.approvedData(), "validUntil", "expiryDate", "expirationDate");
+
         approvedData.setVehicleId(document.getVehicleId());
+        approvedData.setBusinessId(document.getBusinessId());
         approvedData.setDocumentType(request.documentType().trim());
         approvedData.setSubtype(normalizeText(request.subtype()));
         approvedData.setApprovedData(request.approvedData());
-        approvedData.setValidFrom(request.validFrom());
-        approvedData.setValidUntil(request.validUntil());
+        approvedData.setValidFrom(validFrom);
+        approvedData.setValidUntil(validUntil);
         approvedData.setApprovedByUserId(SecurityUtils.currentUserId(authentication));
         approvedData.setApprovedAt(Instant.now());
         approvedData.setReviewComment(null);
         approvedData.setStatus(ApprovedDataStatus.ACTIVE);
         approvedDataRepository.save(approvedData);
+        vehicleDocumentAttributeService.upsertFromApprovedData(approvedData);
 
         document.setStatus(DocumentStatus.VALIDATED);
         document.setApprovedData(approvedData);
@@ -227,6 +297,7 @@ public class DocumentService {
     public DocumentResponse rejectDocument(UUID id, RejectDocumentRequest request, Authentication authentication) {
         requireReviewer(authentication);
         VehicleDocument document = getDocument(id);
+        assertCanReviewDocument(document, authentication);
         if (!REJECTABLE_STATUSES.contains(document.getStatus())) {
             throw new IllegalArgumentException("Only NEEDS_REVIEW or PARSING_FAILED documents can be rejected");
         }
@@ -256,33 +327,213 @@ public class DocumentService {
     public DocumentResponse archiveDocument(UUID id, Authentication authentication) {
         requireReviewer(authentication);
         VehicleDocument document = getDocument(id);
+        assertCanReviewDocument(document, authentication);
         document.setStatus(DocumentStatus.ARCHIVED);
         approvedDataRepository.findByDocument(document).ifPresent(approvedData -> {
             approvedData.setStatus(ApprovedDataStatus.ARCHIVED);
             approvedDataRepository.save(approvedData);
             document.setApprovedData(approvedData);
         });
+        vehicleDocumentAttributeService.archiveForDocument(document);
         return toResponse(documentRepository.save(document), true);
     }
 
     @Transactional(readOnly = true)
-    public List<DocumentResponse> getVehicleDocuments(Long vehicleId, Authentication authentication) {
-        return listByVehicle(vehicleId, authentication);
+    public List<DocumentResponse> getVehicleDocuments(Long vehicleId, String authorizationHeader, Authentication authentication) {
+        return listByVehicle(vehicleId, authorizationHeader, authentication);
     }
 
     @Transactional(readOnly = true)
-    public List<ApprovedDocumentDataResponse> getApprovedVehicleDocumentData(Long vehicleId) {
+    public List<ApprovedDocumentDataResponse> getApprovedVehicleDocumentData(
+            Long vehicleId,
+            String authorizationHeader,
+            Authentication authentication
+    ) {
         if (vehicleId == null) {
             throw new IllegalArgumentException("Vehicle id is required");
         }
-        return approvedDataRepository.findByVehicleIdOrderByValidUntilAscCreatedAtDesc(vehicleId).stream()
+        VehicleBasicInfoResponse vehicle = assertVehicleVisible(vehicleId, authorizationHeader);
+        Long businessId = SecurityUtils.currentBusinessId(authentication);
+        List<ApprovedDocumentData> data = SecurityUtils.isSuperadmin(authentication)
+                ? approvedDataRepository.findByVehicleIdOrderByValidUntilAscCreatedAtDesc(vehicleId)
+                : approvedDataRepository.findByVehicleIdAndBusinessIdOrderByValidUntilAscCreatedAtDesc(
+                        vehicleId,
+                        businessId == null ? vehicle.businessId() : businessId
+                );
+        return data.stream()
                 .map(this::toApprovedDocumentDataResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public DocumentInfoFolderResponse getInfoFolder(UUID id, Authentication authentication) {
+        VehicleDocument document = getDocument(id);
+        assertCanReadDocument(document, authentication);
+        return toInfoFolder(document);
+    }
+
+    @Transactional(readOnly = true)
+    public DocumentInfoFolderResponse getInfoFolder(UUID id, String authorizationHeader, Authentication authentication) {
+        VehicleDocument document = getDocument(id);
+        assertCanReadDocument(document, authentication, authorizationHeader);
+        return toInfoFolder(document);
+    }
+
+    private DocumentInfoFolderResponse toInfoFolder(VehicleDocument document) {
+        ApprovedDocumentData approvedData = approvedDataRepository.findByDocument(document).orElse(null);
+        DocumentExtractionDraft draft = extractionDraftRepository.findByDocument(document).orElse(null);
+        Map<String, Object> source = approvedData != null ? approvedData.getApprovedData() : draft == null ? Map.of() : draft.getExtractedData();
+        if (source == null) {
+            source = Map.of();
+        }
+        Map<String, Object> canonical = source.entrySet().stream()
+                .filter(entry -> Set.of("documentType", "subtype", "licensePlate", "vin", "validFrom", "validUntil", "expiryDate", "expirationDate").contains(entry.getKey()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        Map<String, Object> extra = source.entrySet().stream()
+                .filter(entry -> !canonical.containsKey(entry.getKey()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        return new DocumentInfoFolderResponse(
+                document.getId(),
+                document.getVehicleId(),
+                document.getBusinessId(),
+                document.getDocumentType(),
+                document.getDocumentSubtype(),
+                document.getStatus(),
+                document.getOriginalFileName(),
+                canonical,
+                extra
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<com.fleet.document.dto.VehicleDocumentAttributeResponse> getVehicleDocumentAttributes(
+            Long vehicleId,
+            String authorizationHeader
+    ) {
+        if (vehicleId == null) {
+            throw new IllegalArgumentException("Vehicle id is required");
+        }
+        assertVehicleVisible(vehicleId, authorizationHeader);
+        return vehicleDocumentAttributeService.listActiveByVehicle(vehicleId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<com.fleet.document.dto.VehicleDocumentAttributeResponse> getExpiringVehicleDocumentAttributes(
+            Integer days,
+            boolean includeExpired,
+            String authorizationHeader,
+            Authentication authentication
+    ) {
+        requireReviewer(authentication);
+        int effectiveDays = days == null ? 30 : Math.max(days, 0);
+        List<Long> vehicleIds = fleetVehicleClient.activeVehicles(authorizationHeader).stream()
+                .map(VehicleBasicInfoResponse::id)
+                .toList();
+        return vehicleDocumentAttributeService.listExpiringAttributesForVehicles(vehicleIds, effectiveDays, includeExpired);
+    }
+
+    @Transactional(readOnly = true)
+    public List<VehicleAlertGroupResponse> getGroupedVehicleAlerts(
+            Integer days,
+            boolean includeExpired,
+            String authorizationHeader
+    ) {
+        List<VehicleBasicInfoResponse> vehicles = fleetVehicleClient.activeVehicles(authorizationHeader);
+        List<Long> vehicleIds = vehicles.stream().map(VehicleBasicInfoResponse::id).toList();
+        List<VehicleDocumentAttributeResponse> alerts = vehicleDocumentAttributeService.listExpiringAttributesForVehicles(
+                vehicleIds,
+                days == null ? 30 : Math.max(days, 0),
+                includeExpired
+        );
+        Map<Long, List<VehicleDocumentAttributeResponse>> byVehicle = alerts.stream()
+                .collect(Collectors.groupingBy(VehicleDocumentAttributeResponse::vehicleId));
+        return vehicles.stream()
+                .map(vehicle -> new VehicleAlertGroupResponse(
+                        vehicle.id(),
+                        vehicle.businessId(),
+                        vehicle.licensePlate(),
+                        vehicle.brand(),
+                        vehicle.model(),
+                        vehicle.assignedUserId(),
+                        vehicle.assignedDriverName(),
+                        byVehicle.getOrDefault(vehicle.id(), List.of())
+                ))
                 .toList();
     }
 
     private VehicleDocument getDocument(UUID id) {
         return documentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Document not found: " + id));
+    }
+
+    private VehicleBasicInfoResponse assertVehicleVisible(Long vehicleId, String authorizationHeader) {
+        VehicleBasicInfoResponse vehicle = fleetVehicleClient.vehicleBasicInfo(vehicleId, authorizationHeader);
+        if (vehicle == null || vehicle.businessId() == null) {
+            throw new AccessDeniedException("Access denied");
+        }
+        return vehicle;
+    }
+
+    private void applyParserResult(VehicleDocument document, ParserResultRequest request) {
+        DocumentExtractionDraft draft = extractionDraftRepository.findByDocument(document)
+                .orElseGet(() -> DocumentExtractionDraft.builder().document(document).build());
+        applyParserMetadata(draft, request);
+
+        if (request.parserStatus() == ParserStatus.PARSED && parserResultIsValid(request)) {
+            document.setDocumentType(toDocumentType(request.detectedDocumentType()));
+            document.setDocumentSubtype(normalizeText(request.detectedSubtype()));
+            draft.setParserStatus(ParserStatus.PARSED);
+            extractionDraftRepository.save(draft);
+            document.setStatus(DocumentStatus.NEEDS_REVIEW);
+        } else {
+            draft.setParserStatus(request.parserStatus() == null ? ParserStatus.FAILED : request.parserStatus());
+            if (draft.getParserStatus() == ParserStatus.PARSED) {
+                draft.setErrorCode("INVALID_PARSER_RESULT");
+                draft.setErrorMessage("Parsed result must include extracted data and confidence between 0 and 1 when present");
+            }
+            extractionDraftRepository.save(draft);
+            document.setStatus(DocumentStatus.PARSING_FAILED);
+        }
+    }
+
+    private DocumentType toDocumentType(String value) {
+        if (value == null || value.isBlank()) {
+            return DocumentType.OTHER;
+        }
+        try {
+            return DocumentType.valueOf(value.trim().toUpperCase());
+        } catch (IllegalArgumentException ignored) {
+            return DocumentType.OTHER;
+        }
+    }
+
+    private void assertCanReadDocument(VehicleDocument document, Authentication authentication) {
+        if (SecurityUtils.isSuperadmin(authentication)) {
+            return;
+        }
+        Long businessId = SecurityUtils.currentBusinessId(authentication);
+        if (businessId != null && businessId.equals(document.getBusinessId())) {
+            return;
+        }
+        throw new AccessDeniedException("Access denied");
+    }
+
+    private void assertCanReadDocument(VehicleDocument document, Authentication authentication, String authorizationHeader) {
+        assertCanReadDocument(document, authentication);
+        if (SecurityUtils.isEmployee(authentication)) {
+            assertVehicleVisible(document.getVehicleId(), authorizationHeader);
+        }
+    }
+
+    private void assertCanReviewDocument(VehicleDocument document, Authentication authentication) {
+        if (SecurityUtils.isSuperadmin(authentication)) {
+            return;
+        }
+        Long businessId = SecurityUtils.currentBusinessId(authentication);
+        if (businessId != null && businessId.equals(document.getBusinessId())) {
+            return;
+        }
+        throw new AccessDeniedException("Access denied");
     }
 
     private void applyParserMetadata(DocumentExtractionDraft draft, ParserResultRequest request) {
@@ -317,20 +568,52 @@ public class DocumentService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    private String documentTypeFromReviewData(java.util.Map<String, Object> approvedData) {
+    private String documentTypeFromReviewData(VehicleDocument document, java.util.Map<String, Object> approvedData) {
         if (CollectionUtils.isEmpty(approvedData)) {
-            return null;
+            return document.getDocumentType() == null ? null : document.getDocumentType().name();
         }
         Object documentType = approvedData.get("documentType");
-        return documentType == null ? null : documentType.toString();
+        if (documentType != null && !documentType.toString().isBlank()) {
+            return documentType.toString();
+        }
+        return extractionDraftRepository.findByDocument(document)
+                .map(DocumentExtractionDraft::getDetectedDocumentType)
+                .filter(value -> !value.isBlank())
+                .orElse(document.getDocumentType() == null ? null : document.getDocumentType().name());
     }
 
-    private String subtypeFromReviewData(java.util.Map<String, Object> approvedData) {
-        if (CollectionUtils.isEmpty(approvedData)) {
+    private String subtypeFromReviewData(VehicleDocument document, java.util.Map<String, Object> approvedData) {
+        if (!CollectionUtils.isEmpty(approvedData)) {
+            Object subtype = approvedData.get("subtype");
+            if (subtype != null && !subtype.toString().isBlank()) {
+                return subtype.toString();
+            }
+        }
+        return extractionDraftRepository.findByDocument(document)
+                .map(DocumentExtractionDraft::getDetectedSubtype)
+                .filter(value -> !value.isBlank())
+                .orElse(null);
+    }
+
+    private LocalDate firstDate(LocalDate preferred, Map<String, Object> data, String... keys) {
+        if (preferred != null) {
+            return preferred;
+        }
+        if (CollectionUtils.isEmpty(data)) {
             return null;
         }
-        Object subtype = approvedData.get("subtype");
-        return subtype == null ? null : subtype.toString();
+        for (String key : keys) {
+            Object value = data.get(key);
+            if (value == null || value.toString().isBlank()) {
+                continue;
+            }
+            try {
+                return LocalDate.parse(value.toString().trim());
+            } catch (DateTimeParseException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private DocumentResponse toResponse(VehicleDocument document, boolean includeExtractionDraft) {
@@ -341,7 +624,9 @@ public class DocumentService {
         return new DocumentResponse(
                 document.getId(),
                 document.getVehicleId(),
+                document.getBusinessId(),
                 document.getDocumentType(),
+                document.getDocumentSubtype(),
                 document.getStatus(),
                 document.getOriginalFileName(),
                 document.getStoredFileName(),

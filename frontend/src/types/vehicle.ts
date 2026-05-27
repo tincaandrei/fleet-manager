@@ -21,6 +21,7 @@ export interface VehicleRequest {
 
 export interface Vehicle extends VehicleRequest {
   id: number;
+  businessId: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -33,4 +34,5 @@ export interface VehicleFilters {
   department?: string;
   assignedUserId?: number;
   licensePlate?: string;
+  businessId?: number;
 }

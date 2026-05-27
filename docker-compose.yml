@@ -15,6 +15,19 @@ services:
       - ./traefik/traefik.yml:/traefik.yml:ro
       - ./traefik/dynamic_conf.yml:/dynamic_conf.yml:ro
 
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: fleet/frontend:local
+    container_name: frontend
+    restart: unless-stopped
+    networks:
+      - fleet-net
+    expose:
+      - "80"
+
   # Auth Service from auth-service directory
   auth-postgres:
     image: postgres:16-alpine
@@ -148,6 +161,8 @@ services:
         condition: service_started
       auth-service:
         condition: service_started
+      ollama:
+        condition: service_started
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://document-postgres:5432/${DOCUMENT_DB_NAME:-document_deploy}
@@ -155,6 +170,9 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DOCUMENT_DB_PASSWORD:?Set DOCUMENT_DB_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       FLEET_SERVICE_URL: http://fleet-service:8080
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-${PARSER_OLLAMA_MODEL:-qwen2.5:3b}}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-60s}
       DOCUMENT_STORAGE_PATH: /app/document-storage
     volumes:
       - document-storage-data:/app/document-storage
@@ -163,11 +181,44 @@ services:
     expose:
       - "8080"
 
+  # RabbitMQ broker for service communication
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-fleet}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-fleet}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - fleet-net
+    ports:
+      - "127.0.0.1:${RABBITMQ_AMQP_HOST_PORT:-5672}:5672"
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_HOST_PORT:-15672}:15672"
+    expose:
+      - "5672"
+      - "15672"
+
+  # Ollama runtime for manual parser experiments
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - fleet-net
+    expose:
+      - "11434"
+
 volumes:
   auth-postgres-data-v2:
   fleet-postgres-data:
   document-postgres-data:
   document-storage-data:
+  rabbitmq-data:
+  ollama-data:
 
 networks:
   fleet-net:

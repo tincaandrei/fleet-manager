@@ -36,9 +36,15 @@ public class VehicleDocument {
     @Column(nullable = false)
     private Long vehicleId;
 
+    @Column
+    private Long businessId;
+
     @Enumerated(EnumType.STRING)
     @Column(length = 50)
     private DocumentType documentType;
+
+    @Column(length = 100)
+    private String documentSubtype;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)

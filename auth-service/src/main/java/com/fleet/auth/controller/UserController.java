@@ -1,11 +1,15 @@
 package com.fleet.auth.controller;
 
 import com.fleet.auth.dto.AuthResponse;
+import com.fleet.auth.dto.BusinessRequest;
+import com.fleet.auth.dto.BusinessResponse;
+import com.fleet.auth.dto.CreateBusinessUserRequest;
 import com.fleet.auth.dto.ErrorResponse;
 import com.fleet.auth.dto.LoginRequest;
 import com.fleet.auth.dto.MeResponse;
 import com.fleet.auth.dto.RegisterRequest;
 import com.fleet.auth.dto.UpdateRoleRequest;
+import com.fleet.auth.dto.UpdateUserRequest;
 import com.fleet.auth.entity.Role;
 import com.fleet.auth.service.JwtService;
 import com.fleet.auth.service.CredentialDetails;
@@ -33,6 +37,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -77,7 +83,10 @@ public class UserController {
         Role role = userDetails instanceof CredentialDetails credentialDetails
                 ? credentialDetails.getRole()
                 : Role.fromAuthorities(userDetails.getAuthorities()).stream().findFirst().orElseThrow();
-        return ResponseEntity.ok(new AuthResponse(token, userDetails.getUsername(), role));
+        Long userId = userDetails instanceof CredentialDetails credentialDetails ? credentialDetails.getUserId() : null;
+        Long businessId = userDetails instanceof CredentialDetails credentialDetails ? credentialDetails.getBusinessId() : null;
+        String businessName = userDetails instanceof CredentialDetails credentialDetails ? credentialDetails.getBusinessName() : null;
+        return ResponseEntity.ok(new AuthResponse(token, userDetails.getUsername(), role, userId, businessId, businessName));
     }
 
     @Hidden
@@ -98,8 +107,94 @@ public class UserController {
         return ResponseEntity.ok(userInfoService.getCurrentUser(authentication.getName()));
     }
 
-    @PutMapping("/admin/users/{id}/roles")
-    @Operation(summary = "Update user role", description = "Requires ADMIN role. Assigns a new role to a user.")
+    @PutMapping("/users/me")
+    @Operation(summary = "Update current user profile", description = "Updates email, phone, address, and optionally password for the authenticated user.")
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Profile updated", content = @Content(schema = @Schema(implementation = MeResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid payload", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Authentication required", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "409", description = "Email already exists", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<MeResponse> updateMe(@Valid @RequestBody UpdateUserRequest request,
+                                               Authentication authentication) {
+        return ResponseEntity.ok(userInfoService.updateCurrentUser(request, authentication));
+    }
+
+    @PutMapping("/users/{id}")
+    @Operation(summary = "Update user profile", description = "Updates any user profile. Requires SUPERADMIN.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<MeResponse> updateUser(
+            @Parameter(description = "User id to update.", example = "1") @PathVariable Long id,
+            @Valid @RequestBody UpdateUserRequest request,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(userInfoService.updateUser(id, request, authentication));
+    }
+
+    @PostMapping("/businesses")
+    @Operation(summary = "Create business", description = "Requires SUPERADMIN.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<BusinessResponse> createBusiness(@Valid @RequestBody BusinessRequest request,
+                                                           Authentication authentication) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(userInfoService.createBusiness(request, authentication));
+    }
+
+    @GetMapping("/businesses")
+    @Operation(summary = "List businesses", description = "Requires SUPERADMIN.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<List<BusinessResponse>> listBusinesses(Authentication authentication) {
+        return ResponseEntity.ok(userInfoService.listBusinesses(authentication));
+    }
+
+    @GetMapping("/businesses/{businessId}")
+    @Operation(summary = "Get business", description = "Requires SUPERADMIN.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<BusinessResponse> getBusiness(@PathVariable Long businessId,
+                                                        Authentication authentication) {
+        return ResponseEntity.ok(userInfoService.getBusiness(businessId, authentication));
+    }
+
+    @PutMapping("/businesses/{businessId}")
+    @Operation(summary = "Update business", description = "Requires SUPERADMIN.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<BusinessResponse> updateBusiness(@PathVariable Long businessId,
+                                                           @Valid @RequestBody BusinessRequest request,
+                                                           Authentication authentication) {
+        return ResponseEntity.ok(userInfoService.updateBusiness(businessId, request, authentication));
+    }
+
+    @PostMapping("/businesses/{businessId}/users")
+    @Operation(summary = "Create business user", description = "Requires SUPERADMIN or same-business BUSINESS_ADMIN.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<MeResponse> createBusinessUser(@PathVariable Long businessId,
+                                                         @Valid @RequestBody CreateBusinessUserRequest request,
+                                                         Authentication authentication) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(userInfoService.createBusinessUser(businessId, request, authentication));
+    }
+
+    @GetMapping("/businesses/{businessId}/users")
+    @Operation(summary = "List business users", description = "Requires SUPERADMIN or same-business BUSINESS_ADMIN.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<List<MeResponse>> listBusinessUsers(@PathVariable Long businessId,
+                                                              Authentication authentication) {
+        return ResponseEntity.ok(userInfoService.listBusinessUsers(businessId, authentication));
+    }
+
+    @PutMapping("/businesses/{businessId}/users/{id}")
+    @Operation(summary = "Update business user profile", description = "Updates a business user's email, phone, address, and optionally password. Requires SUPERADMIN or same-business BUSINESS_ADMIN.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<MeResponse> updateBusinessUser(
+            @Parameter(description = "Business id.", example = "1") @PathVariable Long businessId,
+            @Parameter(description = "User id to update.", example = "1") @PathVariable Long id,
+            @Valid @RequestBody UpdateUserRequest request,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(userInfoService.updateBusinessUser(businessId, id, request, authentication));
+    }
+
+    @PutMapping("/businesses/{businessId}/users/{id}/role")
+    @Operation(summary = "Update business user role", description = "Requires SUPERADMIN or same-business BUSINESS_ADMIN.")
     @SecurityRequirement(name = "bearerAuth")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Role updated", content = @Content(schema = @Schema(implementation = MeResponse.class))),
@@ -109,9 +204,11 @@ public class UserController {
             @ApiResponse(responseCode = "404", description = "Target user not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<MeResponse> updateRoles(
+            @Parameter(description = "Business id.", example = "1") @PathVariable Long businessId,
             @Parameter(description = "User id to update.", example = "1") @PathVariable Long id,
-            @Valid @RequestBody UpdateRoleRequest request
+            @Valid @RequestBody UpdateRoleRequest request,
+            Authentication authentication
     ) {
-        return ResponseEntity.ok(userInfoService.updateRole(id, request.role()));
+        return ResponseEntity.ok(userInfoService.updateRole(businessId, id, request.role(), authentication));
     }
 }

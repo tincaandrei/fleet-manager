@@ -31,10 +31,13 @@ public class Vehicle {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 32)
+    @Column
+    private Long businessId;
+
+    @Column(nullable = false, length = 32)
     private String licensePlate;
 
-    @Column(unique = true, length = 64)
+    @Column(length = 64)
     private String vin;
 
     @Column(nullable = false, length = 80)

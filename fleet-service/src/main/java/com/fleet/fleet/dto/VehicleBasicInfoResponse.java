@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record VehicleBasicInfoResponse(
         @Schema(description = "Vehicle id.", example = "1")
         Long id,
+        Long businessId,
         @Schema(description = "Unique vehicle license plate.", example = "B-123-ABC")
         String licensePlate,
         @Schema(description = "Vehicle brand or manufacturer.", example = "Toyota")

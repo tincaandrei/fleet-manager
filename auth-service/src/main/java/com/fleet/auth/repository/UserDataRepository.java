@@ -4,9 +4,11 @@ import com.fleet.auth.entity.UserData;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
+import java.util.List;
 
 public interface UserDataRepository extends JpaRepository<UserData, Long> {
     Optional<UserData> findByEmail(String email);
     Optional<UserData> findByCredentialUsername(String username);
+    List<UserData> findByBusinessIdOrderByCredentialUsernameAsc(Long businessId);
     boolean existsByEmail(String email);
 }

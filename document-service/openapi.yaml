@@ -1,0 +1,842 @@
+openapi: 3.0.1
+info:
+  title: Fleet Manager Document Service API
+  description: "Document upload, review, and approved data APIs for Fleet Manager."
+  contact:
+    name: Fleet Manager Team
+  version: 1.0.0
+servers:
+- url: /api/documents
+  description: Document service through Traefik
+tags:
+- name: Documents
+  description: "Vehicle document upload, review, and download endpoints."
+paths:
+  /{id}/review:
+    post:
+      tags:
+      - Documents
+      summary: Review document
+      description: Approves or rejects extracted document data. Requires STAFF or
+        ADMIN.
+      operationId: review
+      parameters:
+      - name: id
+        in: path
+        description: Document id.
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        description: Review decision.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewDocumentRequest"
+            example:
+              decision: APPROVE
+              approvedData:
+                documentType: INSPECTION
+                inspectionNumber: MOCK-ITP-2026-001
+                expiryDate: 2027-03-10
+              comment: Approved after review
+        required: true
+      responses:
+        "200":
+          description: Review saved
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+        "400":
+          description: Invalid review decision or approved data missing
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+        "403":
+          description: STAFF or ADMIN role required
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+        "404":
+          description: Document not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+        "401":
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+      security:
+      - bearerAuth: []
+  /{id}/reject:
+    post:
+      tags:
+      - Documents
+      summary: Reject document extraction
+      description: Rejects an extraction draft or failed parsing result. Requires
+        STAFF or ADMIN.
+      operationId: reject
+      parameters:
+      - name: id
+        in: path
+        description: Document id.
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RejectDocumentRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+      security:
+      - bearerAuth: []
+  /{id}/parser-result:
+    post:
+      tags:
+      - Documents
+      summary: Receive parser result
+      description: Stores parser output as an unapproved extraction draft.
+      operationId: receiveParserResult
+      parameters:
+      - name: id
+        in: path
+        description: Document id.
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParserResultRequest"
+        required: true
+      responses:
+        "400":
+          description: Invalid parser result
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+        "404":
+          description: Document not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+        "200":
+          description: Parser result accepted
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+        "401":
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+      security:
+      - bearerAuth: []
+  /{id}/archive:
+    post:
+      tags:
+      - Documents
+      summary: Archive document
+      description: Marks a document as ARCHIVED. Requires STAFF or ADMIN.
+      operationId: archivePost
+      parameters:
+      - name: id
+        in: path
+        description: Document id.
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+      security:
+      - bearerAuth: []
+    patch:
+      tags:
+      - Documents
+      summary: Archive document
+      description: Marks a document as ARCHIVED. Requires STAFF or ADMIN.
+      operationId: archive
+      parameters:
+      - name: id
+        in: path
+        description: Document id.
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Document archived
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+        "404":
+          description: Document not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+        "401":
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+        "403":
+          description: ADMIN role required
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+      security:
+      - bearerAuth: []
+  /{id}/approve:
+    post:
+      tags:
+      - Documents
+      summary: Approve document extraction
+      description: Creates or updates official approved document data. Requires STAFF
+        or ADMIN.
+      operationId: approve
+      parameters:
+      - name: id
+        in: path
+        description: Document id.
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApproveDocumentRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+      security:
+      - bearerAuth: []
+  /:
+    get:
+      tags:
+      - Documents
+      summary: List documents by vehicle
+      description: USER sees only validated documents with approved data. STAFF/ADMIN
+        see all document statuses.
+      operationId: listByVehicle_1
+      parameters:
+      - name: vehicleId
+        in: query
+        description: Vehicle id.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      responses:
+        "200":
+          description: Documents returned
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DocumentResponse"
+        "401":
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DocumentResponse"
+        "400":
+          description: Vehicle id is missing or invalid
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DocumentResponse"
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Documents
+      summary: Upload document
+      description: "Uploads a PDF for a vehicle, stores it, and marks it as PARSING."
+      operationId: upload_1
+      parameters:
+      - name: vehicleId
+        in: query
+        description: Vehicle id.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              required:
+              - file
+              type: object
+              properties:
+                file:
+                  type: string
+                  description: PDF file to upload.
+                  format: binary
+      responses:
+        "403":
+          description: Role is not allowed to upload
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+        "200":
+          description: Document uploaded
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+        "401":
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+        "400":
+          description: Validation failed
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      security:
+      - bearerAuth: []
+  /{id}:
+    get:
+      tags:
+      - Documents
+      summary: Get document details
+      description: Returns document metadata and approved review data when present.
+      operationId: getById
+      parameters:
+      - name: id
+        in: path
+        description: Document id.
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Document returned
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+        "404":
+          description: Document not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+        "401":
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+      security:
+      - bearerAuth: []
+  /{id}/download:
+    get:
+      tags:
+      - Documents
+      summary: Download document
+      description: Downloads the stored PDF file. Requires authentication.
+      operationId: download
+      parameters:
+      - name: id
+        in: path
+        description: Document id.
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "404":
+          description: Document not found
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        "200":
+          description: PDF file returned
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+      security:
+      - bearerAuth: []
+  /vehicles/{vehicleId}/documents:
+    get:
+      tags:
+      - Documents
+      summary: List documents by vehicle
+      description: Path-based alias for listing vehicle documents.
+      operationId: listVehicleDocuments
+      parameters:
+      - name: vehicleId
+        in: path
+        description: Vehicle id.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DocumentResponse"
+      security:
+      - bearerAuth: []
+  /vehicles/{vehicleId}/attributes:
+    get:
+      tags:
+      - Documents
+      summary: List active vehicle document attributes
+      description: Returns normalized approved document attributes for a vehicle.
+        These records are used for expiration alerts.
+      operationId: listVehicleDocumentAttributes
+      parameters:
+      - name: vehicleId
+        in: path
+        description: Vehicle id.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VehicleDocumentAttributeResponse"
+      security:
+      - bearerAuth: []
+  /vehicles/{vehicleId}/approved-document-data:
+    get:
+      tags:
+      - Documents
+      summary: List approved document data by vehicle
+      description: Returns official approved document data for a vehicle.
+      operationId: listApprovedVehicleDocumentData
+      parameters:
+      - name: vehicleId
+        in: path
+        description: Vehicle id.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApprovedDocumentDataResponse"
+      security:
+      - bearerAuth: []
+  /review-queue:
+    get:
+      tags:
+      - Documents
+      summary: Review queue
+      description: Returns documents with NEEDS_REVIEW status. Requires STAFF or ADMIN.
+      operationId: reviewQueue
+      responses:
+        "403":
+          description: STAFF or ADMIN role required
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DocumentResponse"
+        "401":
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DocumentResponse"
+        "200":
+          description: Review queue returned
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DocumentResponse"
+      security:
+      - bearerAuth: []
+  /alerts/document-expirations:
+    get:
+      tags:
+      - Documents
+      summary: List document expiration alert candidates
+      description: Returns active vehicle document attributes that are expired or
+        expire within the requested number of days. Requires STAFF or ADMIN.
+      operationId: listDocumentExpirationAlerts
+      parameters:
+      - name: days
+        in: query
+        description: Days ahead to include.
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 30
+        example: 30
+      - name: includeExpired
+        in: query
+        description: Include already expired documents.
+        required: false
+        schema:
+          type: boolean
+          default: true
+        example: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VehicleDocumentAttributeResponse"
+      security:
+      - bearerAuth: []
+components:
+  schemas:
+    ReviewDocumentRequest:
+      required:
+      - decision
+      type: object
+      properties:
+        decision:
+          type: string
+          description: Review decision.
+          example: APPROVE
+          enum:
+          - APPROVE
+          - REJECT
+        approvedData:
+          type: object
+          additionalProperties:
+            type: object
+            description: Approved document data. Required when decision is APPROVE.
+          description: Approved document data. Required when decision is APPROVE.
+        comment:
+          type: string
+          description: Optional review comment.
+          example: Approved after correcting mileage.
+      description: Payload used by staff/admin to approve or reject extracted data.
+    ApprovedDocumentDataResponse:
+      type: object
+      properties:
+        documentType:
+          type: string
+        subtype:
+          type: string
+        validFrom:
+          type: string
+          format: date
+        validUntil:
+          type: string
+          format: date
+        approvedData:
+          type: object
+          additionalProperties:
+            type: object
+        approvedBy:
+          type: integer
+          format: int64
+        approvedAt:
+          type: string
+          format: date-time
+      description: Official reviewed vehicle document data.
+    DocumentExtractionResponse:
+      type: object
+      properties:
+        detectedDocumentType:
+          type: string
+        detectedSubtype:
+          type: string
+        confidence:
+          type: number
+        extractedData:
+          type: object
+          additionalProperties:
+            type: object
+        warnings:
+          type: array
+          items:
+            type: string
+        parserName:
+          type: string
+        parserVersion:
+          type: string
+        parserStatus:
+          type: string
+          enum:
+          - PARSED
+          - FAILED
+        errorCode:
+          type: string
+        errorMessage:
+          type: string
+      description: Unapproved parser/AI extraction draft.
+    DocumentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        vehicleId:
+          type: integer
+          format: int64
+        documentType:
+          type: string
+          enum:
+          - INSPECTION
+          - INSURANCE
+          - INVOICE
+          - REGISTRATION
+          - OTHER
+        status:
+          type: string
+          enum:
+          - PARSING
+          - PARSING_FAILED
+          - NEEDS_REVIEW
+          - VALIDATED
+          - REJECTED
+          - ARCHIVED
+        originalFileName:
+          type: string
+        storedFileName:
+          type: string
+        contentType:
+          type: string
+        fileSize:
+          type: integer
+          format: int64
+        storagePath:
+          type: string
+        uploadedByUserId:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        extraction:
+          $ref: "#/components/schemas/DocumentExtractionResponse"
+        approvedData:
+          $ref: "#/components/schemas/ApprovedDocumentDataResponse"
+      description: Document metadata with approved review data.
+    RejectDocumentRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Reason for rejecting the extracted data.
+          example: Document is unreadable.
+      description: Staff/admin rejection payload.
+    ParserResultRequest:
+      required:
+      - parserStatus
+      type: object
+      properties:
+        documentId:
+          type: string
+          description: Document id. Must match the path id when present.
+          format: uuid
+        parserStatus:
+          type: string
+          description: Parser result status.
+          example: PARSED
+          enum:
+          - PARSED
+          - FAILED
+        detectedDocumentType:
+          type: string
+        detectedSubtype:
+          type: string
+        confidence:
+          type: number
+        parserName:
+          type: string
+        parserVersion:
+          type: string
+        extractedData:
+          type: object
+          additionalProperties:
+            type: object
+        warnings:
+          type: array
+          items:
+            type: string
+        errorCode:
+          type: string
+        errorMessage:
+          type: string
+      description: Parser-service result payload for a document extraction attempt.
+    ApproveDocumentRequest:
+      required:
+      - approvedData
+      - documentType
+      type: object
+      properties:
+        approvedData:
+          type: object
+          additionalProperties:
+            type: object
+            description: Approved official vehicle document data.
+          description: Approved official vehicle document data.
+        documentType:
+          type: string
+          description: Official document type.
+          example: INSPECTION
+        subtype:
+          type: string
+          description: Optional subtype.
+          example: PERIODIC_TECHNICAL_INSPECTION
+        validFrom:
+          type: string
+          format: date
+        validUntil:
+          type: string
+          format: date
+      description: Staff/admin approval payload for official document data.
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Human-readable error message.
+          example: "Document not found: 7b9b2a0f-2b4f-4a9a-a80e-70dcda3cf9a8"
+      description: Error response returned for validation and business rule failures.
+    VehicleDocumentAttributeResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        vehicleId:
+          type: integer
+          format: int64
+        documentId:
+          type: string
+          format: uuid
+        approvedDataId:
+          type: string
+          format: uuid
+        documentType:
+          type: string
+        subtype:
+          type: string
+        licensePlate:
+          type: string
+        vin:
+          type: string
+        validFrom:
+          type: string
+          format: date
+        validUntil:
+          type: string
+          format: date
+        sourceData:
+          type: object
+          additionalProperties:
+            type: object
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - SUPERSEDED
+          - ARCHIVED
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      description: Normalized vehicle document attribute used for expiration alerts.
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

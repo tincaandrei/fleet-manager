@@ -4,7 +4,13 @@ import { register } from '../api/authApi';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ username: '', email: '', password: '', phone: '', address: '' });
+  const [form, setForm] = useState({
+    username: '',
+    email: '',
+    password: '',
+    phone: '',
+    address: '',
+  });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -26,34 +32,78 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="auth-page">
-      <h1>Fleet Manager</h1>
-      <h2>Create Account</h2>
-      <form onSubmit={handleSubmit} className="auth-form">
-        {error && <p className="error">{error}</p>}
-        <label>
-          Username
-          <input value={form.username} onChange={set('username')} required autoFocus />
-        </label>
-        <label>
-          Email
-          <input type="email" value={form.email} onChange={set('email')} required />
-        </label>
-        <label>
-          Password
-          <input type="password" value={form.password} onChange={set('password')} required />
-        </label>
-        <label>
-          Phone
-          <input value={form.phone} onChange={set('phone')} />
-        </label>
-        <label>
-          Address
-          <input value={form.address} onChange={set('address')} />
-        </label>
-        <button type="submit" disabled={loading}>{loading ? 'Registering...' : 'Register'}</button>
-      </form>
-      <p>Already have an account? <Link to="/login">Sign in</Link></p>
+    <div className="auth-bg">
+      <div className="auth-card">
+        {/* Brand */}
+        <div className="auth-brand">
+          <span className="auth-brand-dot" aria-hidden="true" />
+          <span className="auth-brand-text">Fleet Manager</span>
+        </div>
+
+        <h1>Create Account</h1>
+        <h2>Fill in your details to get started</h2>
+
+        <form onSubmit={handleSubmit} className="auth-form">
+          {error && <p className="error">{error}</p>}
+
+          <label>
+            Username
+            <input
+              value={form.username}
+              onChange={set('username')}
+              required
+              autoFocus
+              autoComplete="username"
+            />
+          </label>
+
+          <label>
+            Email
+            <input
+              type="email"
+              value={form.email}
+              onChange={set('email')}
+              required
+              autoComplete="email"
+            />
+          </label>
+
+          <label>
+            Password
+            <input
+              type="password"
+              value={form.password}
+              onChange={set('password')}
+              required
+              autoComplete="new-password"
+            />
+          </label>
+
+          <label>
+            Phone
+            <input
+              value={form.phone}
+              onChange={set('phone')}
+              autoComplete="tel"
+            />
+          </label>
+
+          <label>
+            Address
+            <input
+              value={form.address}
+              onChange={set('address')}
+              autoComplete="street-address"
+            />
+          </label>
+
+          <button type="submit" disabled={loading}>
+            {loading ? 'Registering…' : 'Register'}
+          </button>
+        </form>
+
+        <p>Already have an account? <Link to="/login">Sign in</Link></p>
+      </div>
     </div>
   );
 }

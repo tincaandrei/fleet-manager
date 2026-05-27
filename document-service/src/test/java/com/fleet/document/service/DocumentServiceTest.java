@@ -3,6 +3,7 @@ package com.fleet.document.service;
 import com.fleet.document.dto.ApproveDocumentRequest;
 import com.fleet.document.dto.ParserResultRequest;
 import com.fleet.document.dto.RejectDocumentRequest;
+import com.fleet.document.dto.VehicleBasicInfoResponse;
 import com.fleet.document.entity.ApprovedDocumentData;
 import com.fleet.document.entity.DocumentExtractionDraft;
 import com.fleet.document.entity.DocumentStatus;
@@ -52,26 +53,32 @@ class DocumentServiceTest {
     private FleetVehicleClient fleetVehicleClient;
 
     @Mock
+    private DocumentParsingService documentParsingService;
+
+    @Mock
+    private VehicleDocumentAttributeService vehicleDocumentAttributeService;
+
+    @Mock
     private MultipartFile multipartFile;
 
     @InjectMocks
     private DocumentService documentService;
 
     private final Authentication staffAuth = new TestingAuthenticationToken(
-            new JwtPrincipal("staff", 10L, java.util.Set.of("STAFF")),
+            new JwtPrincipal("staff", 10L, 100L, java.util.Set.of("BUSINESS_ADMIN")),
             null,
-            "ROLE_STAFF"
+            "ROLE_BUSINESS_ADMIN"
     );
 
     private final Authentication userAuth = new TestingAuthenticationToken(
-            new JwtPrincipal("user", 20L, java.util.Set.of("USER")),
+            new JwtPrincipal("user", 20L, 100L, java.util.Set.of("EMPLOYEE")),
             null,
-            "ROLE_USER"
+            "ROLE_EMPLOYEE"
     );
 
     @Test
     void uploadPdfCreatesParsingDocument() {
-        when(fleetVehicleClient.vehicleExists(1L, "Bearer token")).thenReturn(true);
+        when(fleetVehicleClient.vehicleBasicInfo(1L, "Bearer token")).thenReturn(vehicleInfo());
         when(storageService.save(multipartFile)).thenReturn(new StoredDocumentFile(
                 "inspection.pdf",
                 "stored.pdf",
@@ -83,22 +90,22 @@ class DocumentServiceTest {
         when(approvedDataRepository.findByDocument(any())).thenReturn(Optional.empty());
         when(extractionDraftRepository.findByDocument(any())).thenReturn(Optional.empty());
 
-        documentService.uploadDocument(multipartFile, 1L, DocumentType.INSPECTION, "Bearer token", staffAuth);
+        documentService.uploadDocument(multipartFile, 1L, "Bearer token", staffAuth);
 
         ArgumentCaptor<VehicleDocument> captor = ArgumentCaptor.forClass(VehicleDocument.class);
         verify(documentRepository).save(captor.capture());
         assertThat(captor.getValue().getStatus()).isEqualTo(DocumentStatus.PARSING);
         assertThat(captor.getValue().getVehicleId()).isEqualTo(1L);
+        verify(documentParsingService).parse(captor.getValue());
     }
 
     @Test
     void uploadRejectsUnknownVehicle() {
-        when(fleetVehicleClient.vehicleExists(99L, "Bearer token")).thenReturn(false);
+        when(fleetVehicleClient.vehicleBasicInfo(99L, "Bearer token")).thenReturn(null);
 
         assertThatThrownBy(() -> documentService.uploadDocument(
                 multipartFile,
                 99L,
-                DocumentType.INSPECTION,
                 "Bearer token",
                 staffAuth
         )).isInstanceOf(IllegalArgumentException.class)
@@ -118,7 +125,7 @@ class DocumentServiceTest {
         documentService.receiveParserResult(documentId, new ParserResultRequest(
                 documentId,
                 ParserStatus.PARSED,
-                "INSPECTION",
+                "TECHNICAL_INSPECTION",
                 "ITP",
                 new BigDecimal("0.91"),
                 "mock-parser",
@@ -174,7 +181,7 @@ class DocumentServiceTest {
 
         documentService.approveDocument(documentId, new ApproveDocumentRequest(
                 Map.of("expiryDate", "2027-03-10"),
-                "INSPECTION",
+                "TECHNICAL_INSPECTION",
                 "ITP",
                 null,
                 java.time.LocalDate.of(2027, 3, 10)
@@ -183,7 +190,9 @@ class DocumentServiceTest {
         ArgumentCaptor<ApprovedDocumentData> approvedCaptor = ArgumentCaptor.forClass(ApprovedDocumentData.class);
         verify(approvedDataRepository).save(approvedCaptor.capture());
         assertThat(approvedCaptor.getValue().getVehicleId()).isEqualTo(1L);
-        assertThat(approvedCaptor.getValue().getDocumentType()).isEqualTo("INSPECTION");
+        assertThat(approvedCaptor.getValue().getDocumentType()).isEqualTo("TECHNICAL_INSPECTION");
+        assertThat(approvedCaptor.getValue().getValidUntil()).isEqualTo(java.time.LocalDate.of(2027, 3, 10));
+        verify(vehicleDocumentAttributeService).upsertFromApprovedData(approvedCaptor.getValue());
         assertThat(document.getStatus()).isEqualTo(DocumentStatus.VALIDATED);
     }
 
@@ -194,7 +203,7 @@ class DocumentServiceTest {
 
         assertThatThrownBy(() -> documentService.approveDocument(documentId, new ApproveDocumentRequest(
                 Map.of("expiryDate", "2027-03-10"),
-                "INSPECTION",
+                "TECHNICAL_INSPECTION",
                 null,
                 null,
                 null
@@ -261,7 +270,8 @@ class DocumentServiceTest {
         VehicleDocument document = new VehicleDocument();
         document.setId(id);
         document.setVehicleId(1L);
-        document.setDocumentType(DocumentType.INSPECTION);
+        document.setBusinessId(100L);
+        document.setDocumentType(DocumentType.TECHNICAL_INSPECTION);
         document.setStatus(status);
         document.setOriginalFileName("inspection.pdf");
         document.setStoredFileName("stored.pdf");
@@ -269,5 +279,9 @@ class DocumentServiceTest {
         document.setFileSize(123L);
         document.setStoragePath("/tmp/stored.pdf");
         return document;
+    }
+
+    private VehicleBasicInfoResponse vehicleInfo() {
+        return new VehicleBasicInfoResponse(1L, 100L, "B123ABC", "Dacia", "Logan", "ACTIVE", null, null);
     }
 }

@@ -10,6 +10,9 @@ public record AuthResponse(
         @Schema(description = "Authenticated username.", example = "alice")
         String username,
         @Schema(description = "Current role embedded in the token.", example = "USER")
-        Role role
+        Role role,
+        Long userId,
+        Long businessId,
+        String businessName
 ) {
 }

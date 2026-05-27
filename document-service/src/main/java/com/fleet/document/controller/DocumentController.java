@@ -3,11 +3,13 @@ package com.fleet.document.controller;
 import com.fleet.document.dto.ApproveDocumentRequest;
 import com.fleet.document.dto.ApprovedDocumentDataResponse;
 import com.fleet.document.dto.DocumentResponse;
+import com.fleet.document.dto.DocumentInfoFolderResponse;
 import com.fleet.document.dto.ErrorResponse;
 import com.fleet.document.dto.ParserResultRequest;
 import com.fleet.document.dto.RejectDocumentRequest;
 import com.fleet.document.dto.ReviewDocumentRequest;
-import com.fleet.document.entity.DocumentType;
+import com.fleet.document.dto.VehicleAlertGroupResponse;
+import com.fleet.document.dto.VehicleDocumentAttributeResponse;
 import com.fleet.document.entity.VehicleDocument;
 import com.fleet.document.service.DocumentService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -62,7 +64,7 @@ public class DocumentController {
 
     private final DocumentService documentService;
 
-    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(path = {"", "/"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload document", description = "Uploads a PDF for a vehicle, stores it, and marks it as PARSING.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Document uploaded", content = @Content(schema = @Schema(implementation = DocumentResponse.class))),
@@ -75,17 +77,12 @@ public class DocumentController {
             @RequestPart("file") MultipartFile file,
             @Parameter(description = "Vehicle id.", example = "1", required = true)
             @RequestParam(name = "vehicleId") Long vehicleId,
-            @Parameter(description = "Optional declared document type.", example = "INSPECTION")
-            @RequestParam(name = "declaredDocumentType", required = false) DocumentType declaredDocumentType,
-            @Parameter(description = "Legacy optional declared document type.", example = "INSPECTION")
-            @RequestParam(name = "documentType", required = false) DocumentType documentType,
             HttpServletRequest servletRequest,
             Authentication authentication
     ) {
         return ResponseEntity.ok(documentService.upload(
                 file,
                 vehicleId,
-                declaredDocumentType == null ? documentType : declaredDocumentType,
                 servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
                 authentication
         ));
@@ -117,9 +114,14 @@ public class DocumentController {
     public ResponseEntity<List<DocumentResponse>> listByVehicle(
             @Parameter(description = "Vehicle id.", example = "1", required = true)
             @RequestParam(name = "vehicleId") Long vehicleId,
+            HttpServletRequest servletRequest,
             Authentication authentication
     ) {
-        return ResponseEntity.ok(documentService.listByVehicle(vehicleId, authentication));
+        return ResponseEntity.ok(documentService.listByVehicle(
+                vehicleId,
+                servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
+                authentication
+        ));
     }
 
     @GetMapping("/vehicles/{vehicleId}/documents")
@@ -127,18 +129,80 @@ public class DocumentController {
     public ResponseEntity<List<DocumentResponse>> listVehicleDocuments(
             @Parameter(description = "Vehicle id.", example = "1", required = true)
             @PathVariable Long vehicleId,
+            HttpServletRequest servletRequest,
             Authentication authentication
     ) {
-        return ResponseEntity.ok(documentService.getVehicleDocuments(vehicleId, authentication));
+        return ResponseEntity.ok(documentService.getVehicleDocuments(
+                vehicleId,
+                servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
+                authentication
+        ));
     }
 
     @GetMapping("/vehicles/{vehicleId}/approved-document-data")
     @Operation(summary = "List approved document data by vehicle", description = "Returns official approved document data for a vehicle.")
     public ResponseEntity<List<ApprovedDocumentDataResponse>> listApprovedVehicleDocumentData(
             @Parameter(description = "Vehicle id.", example = "1", required = true)
-            @PathVariable Long vehicleId
+            @PathVariable Long vehicleId,
+            HttpServletRequest servletRequest,
+            Authentication authentication
     ) {
-        return ResponseEntity.ok(documentService.getApprovedVehicleDocumentData(vehicleId));
+        return ResponseEntity.ok(documentService.getApprovedVehicleDocumentData(
+                vehicleId,
+                servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
+                authentication
+        ));
+    }
+
+    @GetMapping("/vehicles/{vehicleId}/attributes")
+    @Operation(
+            summary = "List active vehicle document attributes",
+            description = "Returns normalized approved document attributes for a vehicle. These records are used for expiration alerts."
+    )
+    public ResponseEntity<List<VehicleDocumentAttributeResponse>> listVehicleDocumentAttributes(
+            @Parameter(description = "Vehicle id.", example = "1", required = true)
+            @PathVariable Long vehicleId,
+            HttpServletRequest servletRequest
+    ) {
+        return ResponseEntity.ok(documentService.getVehicleDocumentAttributes(
+                vehicleId,
+                servletRequest.getHeader(HttpHeaders.AUTHORIZATION)
+        ));
+    }
+
+    @GetMapping("/alerts/document-expirations")
+    @Operation(
+            summary = "List document expiration alert candidates",
+            description = "Returns active vehicle document attributes that are expired or expire within the requested number of days. Requires STAFF or ADMIN."
+    )
+    public ResponseEntity<List<VehicleDocumentAttributeResponse>> listDocumentExpirationAlerts(
+            @Parameter(description = "Days ahead to include.", example = "30")
+            @RequestParam(name = "days", required = false, defaultValue = "30") Integer days,
+            @Parameter(description = "Include already expired documents.", example = "true")
+            @RequestParam(name = "includeExpired", required = false, defaultValue = "true") boolean includeExpired,
+            HttpServletRequest servletRequest,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(documentService.getExpiringVehicleDocumentAttributes(
+                days,
+                includeExpired,
+                servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
+                authentication
+        ));
+    }
+
+    @GetMapping("/alerts/vehicles")
+    @Operation(summary = "Grouped vehicle document alerts", description = "Returns visible vehicles with their expired/upcoming document alerts.")
+    public ResponseEntity<List<VehicleAlertGroupResponse>> groupedVehicleAlerts(
+            @RequestParam(name = "days", required = false, defaultValue = "30") Integer days,
+            @RequestParam(name = "includeExpired", required = false, defaultValue = "true") boolean includeExpired,
+            HttpServletRequest servletRequest
+    ) {
+        return ResponseEntity.ok(documentService.getGroupedVehicleAlerts(
+                days,
+                includeExpired,
+                servletRequest.getHeader(HttpHeaders.AUTHORIZATION)
+        ));
     }
 
     @GetMapping("/{id}")
@@ -150,9 +214,28 @@ public class DocumentController {
     })
     public ResponseEntity<DocumentResponse> getById(
             @Parameter(description = "Document id.") @PathVariable UUID id,
+            HttpServletRequest servletRequest,
             Authentication authentication
     ) {
-        return ResponseEntity.ok(documentService.getById(id, authentication));
+        return ResponseEntity.ok(documentService.getById(
+                id,
+                servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
+                authentication
+        ));
+    }
+
+    @GetMapping("/{id}/info-folder")
+    @Operation(summary = "Document info folder", description = "Returns canonical and extra extracted metadata for a document.")
+    public ResponseEntity<DocumentInfoFolderResponse> infoFolder(
+            @Parameter(description = "Document id.") @PathVariable UUID id,
+            HttpServletRequest servletRequest,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(documentService.getInfoFolder(
+                id,
+                servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
+                authentication
+        ));
     }
 
     @GetMapping("/{id}/download")
@@ -163,10 +246,13 @@ public class DocumentController {
             @ApiResponse(responseCode = "404", description = "Document not found")
     })
     public ResponseEntity<Resource> download(
-            @Parameter(description = "Document id.") @PathVariable UUID id
+            @Parameter(description = "Document id.") @PathVariable UUID id,
+            HttpServletRequest servletRequest,
+            Authentication authentication
     ) {
-        VehicleDocument document = documentService.getDownloadMetadata(id);
-        Resource resource = documentService.download(id);
+        String authorizationHeader = servletRequest.getHeader(HttpHeaders.AUTHORIZATION);
+        VehicleDocument document = documentService.getDownloadMetadata(id, authorizationHeader, authentication);
+        Resource resource = documentService.download(id, authorizationHeader, authentication);
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()

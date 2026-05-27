@@ -9,9 +9,11 @@ import java.util.List;
 
 public interface VehicleRepository extends JpaRepository<Vehicle, Long>, JpaSpecificationExecutor<Vehicle> {
 
-    boolean existsByLicensePlateIgnoreCase(String licensePlate);
+    boolean existsByBusinessIdAndLicensePlateIgnoreCase(Long businessId, String licensePlate);
 
-    boolean existsByVinIgnoreCase(String vin);
+    boolean existsByBusinessIdAndVinIgnoreCase(Long businessId, String vin);
 
     List<Vehicle> findByStatus(VehicleStatus status);
+
+    List<Vehicle> findByBusinessIdAndStatus(Long businessId, VehicleStatus status);
 }

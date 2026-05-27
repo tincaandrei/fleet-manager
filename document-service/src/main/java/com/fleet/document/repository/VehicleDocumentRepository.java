@@ -13,6 +13,8 @@ public interface VehicleDocumentRepository extends JpaRepository<VehicleDocument
 
     List<VehicleDocument> findByVehicleIdAndStatusOrderByCreatedAtDesc(Long vehicleId, DocumentStatus status);
 
+    List<VehicleDocument> findByBusinessIdAndStatusOrderByCreatedAtAsc(Long businessId, DocumentStatus status);
+
     List<VehicleDocument> findByVehicleIdAndStatusInOrderByCreatedAtDesc(Long vehicleId, List<DocumentStatus> statuses);
 
     List<VehicleDocument> findByStatusOrderByCreatedAtAsc(DocumentStatus status);

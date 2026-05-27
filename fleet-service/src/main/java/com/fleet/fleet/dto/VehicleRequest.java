@@ -12,6 +12,9 @@ import jakarta.validation.constraints.Size;
 
 @Schema(description = "Payload used to create or replace a vehicle in the fleet registry.")
 public record VehicleRequest(
+        @Schema(description = "Business id. Required only for SUPERADMIN-created vehicles.", example = "1")
+        Long businessId,
+
         @NotBlank(message = "License plate is required")
         @Size(max = 32, message = "License plate must be at most 32 characters")
         @Schema(description = "Unique vehicle license plate.", example = "B-123-ABC", requiredMode = Schema.RequiredMode.REQUIRED)
