@@ -19,7 +19,7 @@ export default function VehiclesPage() {
   /**
    * Build the initial filter set based on role:
    * - EMPLOYEE: backend already scopes by assignedUserId, no extra filter needed
-   * - BUSINESS_ADMIN: backend scopes by businessId, no extra filter needed
+   * - BUSINESS_ADMIN: backend scopes by organization, no extra filter needed
    * - SUPERADMIN: no default scope, but may manually filter by businessId
    */
   const load = (f: VehicleFilters = filters) => {
@@ -102,11 +102,11 @@ export default function VehiclesPage() {
             onChange={setFilter('department')}
           />
 
-          {/* SUPERADMIN can filter across businesses */}
+          {/* SUPERADMIN can filter across organizations */}
           {isSuperAdmin && (
             <input
               type="number"
-              placeholder="Business ID"
+              placeholder="Organization ID"
               value={filters.businessId ?? ''}
               onChange={(e) =>
                 setFilters((prev) => ({
@@ -136,7 +136,7 @@ export default function VehiclesPage() {
 
         {/* Contextual note for BUSINESS_ADMIN */}
         {role === 'BUSINESS_ADMIN' && businessId != null && (
-          <p className="info-note">Showing all vehicles in your business (ID {businessId}).</p>
+          <p className="info-note">Showing all vehicles in your organization (ID {businessId}).</p>
         )}
 
         {error && <p className="error">{error}</p>}
@@ -151,7 +151,7 @@ export default function VehiclesPage() {
               <th>Fuel</th>
               <th>Status</th>
               <th>Department</th>
-              {isSuperAdmin && <th>Business</th>}
+              {isSuperAdmin && <th>Organization</th>}
               <th>Actions</th>
             </tr>
           </thead>
@@ -172,7 +172,7 @@ export default function VehiclesPage() {
                 </td>
                 <td data-label="Department">{v.department}</td>
                 {isSuperAdmin && (
-                  <td data-label="Business">{v.businessId ?? '—'}</td>
+                  <td data-label="Organization">{v.businessId ?? '-'}</td>
                 )}
                 <td data-label="Actions" className="actions-cell">
                   <Link to={`/vehicles/${v.id}`}>View</Link>

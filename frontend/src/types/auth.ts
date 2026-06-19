@@ -32,8 +32,8 @@ export interface UserProfile {
   userId: number;
   username: string;
   email: string;
-  phone: string;
-  address: string;
+  phone: string | null;
+  address: string | null;
   role: Role;
   businessId: number | null;
   businessName: string | null;
@@ -85,6 +85,11 @@ export interface CreateBusinessUserRequest {
 }
 
 export interface UpdateRoleRequest {
+  role: 'BUSINESS_ADMIN' | 'EMPLOYEE';
+}
+
+export interface AssignBusinessUserRequest {
+  businessId: number;
   role: 'BUSINESS_ADMIN' | 'EMPLOYEE';
 }
 

@@ -10,6 +10,9 @@ export function normalizeRole(value: unknown): Role | null {
   return ROLES.includes(normalized) ? normalized : null;
 }
 
-export function homeForRole(role: Role | null): string {
-  return role === 'SUPERADMIN' ? '/businesses' : '/vehicles';
+export function homeForRole(role: Role | null, businessId?: number | null): string {
+  if (role === 'SUPERADMIN') {
+    return '/businesses';
+  }
+  return businessId == null ? '/pending-organization' : '/vehicles';
 }

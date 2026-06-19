@@ -25,7 +25,7 @@ export default function LoginPage() {
         return;
       }
       login(token, name, normalizedRole, userId, businessId, businessName);
-      navigate(homeForRole(normalizedRole));
+      navigate(homeForRole(normalizedRole, businessId));
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } };
       setError(e.response?.data?.message ?? 'Login failed. Check your credentials.');

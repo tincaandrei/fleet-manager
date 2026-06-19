@@ -1663,6 +1663,67 @@ p { margin: 0.5rem 0; }
   grid-column: 1 / -1;
 }
 
+.management-section {
+  margin-bottom: 1.25rem;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.section-header span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.inline-assignment {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.inline-assignment select {
+  min-width: 150px;
+  height: 32px;
+  padding: 0.3rem 0.55rem;
+  border-radius: var(--radius);
+}
+
+.inline-error {
+  flex-basis: 100%;
+  color: var(--red);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.pending-panel {
+  max-width: 760px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  padding: 1.25rem 1.5rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.pending-panel p {
+  color: var(--muted);
+  margin-top: 0.4rem;
+}
+
+.pending-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
 /* ── INFO FOLDER PANEL ─────────────────────────────────────────────────────── */
 
 .info-folder-panel {

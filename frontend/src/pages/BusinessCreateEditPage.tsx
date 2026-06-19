@@ -26,7 +26,6 @@ export default function BusinessCreateEditPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Load existing business when editing
   useEffect(() => {
     if (!isEdit || !id) return;
     setLoadError(null);
@@ -41,7 +40,7 @@ export default function BusinessCreateEditPage() {
           active: res.data.active,
         });
       })
-      .catch((err: unknown) => setLoadError(apiMessage(err, 'Failed to load business.')));
+      .catch((err: unknown) => setLoadError(apiMessage(err, 'Failed to load organization.')));
   }, [id, isEdit]);
 
   const setField = (field: keyof BusinessRequest, value: string | boolean) => {
@@ -56,7 +55,7 @@ export default function BusinessCreateEditPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) {
-      setSubmitError('Business name is required.');
+      setSubmitError('Organization name is required.');
       return;
     }
     const payload: BusinessRequest = {
@@ -78,7 +77,7 @@ export default function BusinessCreateEditPage() {
         navigate(`/businesses/${res.data.id}/users`);
       }
     } catch (err: unknown) {
-      setSubmitError(apiMessage(err, 'Failed to save business.'));
+      setSubmitError(apiMessage(err, 'Failed to save organization.'));
     } finally {
       setLoading(false);
     }
@@ -89,8 +88,8 @@ export default function BusinessCreateEditPage() {
       <Navbar />
       <main className="page">
         <div className="page-header">
-          <h1>{isEdit ? 'Edit Business' : 'New Business'}</h1>
-          <Link to="/businesses">← Businesses</Link>
+          <h1>{isEdit ? 'Edit Organization' : 'New Organization'}</h1>
+          <Link to="/businesses">Back to Organizations</Link>
         </div>
 
         {loadError && <p className="error">{loadError}</p>}
@@ -99,7 +98,7 @@ export default function BusinessCreateEditPage() {
           {submitError && <p className="error">{submitError}</p>}
 
           <label>
-            Business Name
+            Organization Name
             <input
               value={form.name}
               onChange={(e) => setField('name', e.target.value)}
@@ -152,11 +151,11 @@ export default function BusinessCreateEditPage() {
               checked={form.active ?? true}
               onChange={(e) => setField('active', e.target.checked)}
             />
-            Active business
+            Active organization
           </label>
 
           <button type="submit" disabled={loading}>
-            {loading ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Business'}
+            {loading ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Organization'}
           </button>
         </form>
       </main>

@@ -85,6 +85,17 @@ function fieldsFromExtraction(
   };
 }
 
+function reviewStateFor(doc: DocumentResponse, decision: 'APPROVE' | 'REJECT'): ReviewState {
+  return {
+    docId: doc.id,
+    decision,
+    fields: fieldsFromExtraction(doc.extraction),
+    comment: '',
+    loading: false,
+    error: null,
+  };
+}
+
 /**
  * Build the approvedData payload from structured form fields.
  * Omits fields that are blank strings.
@@ -274,10 +285,34 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
     }
     setUploading(true);
     try {
-      await uploadDocument(vehicleId, uploadFile);
+      const uploaded = (await uploadDocument(vehicleId, uploadFile)).data;
       setUploadFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
-      showToast({ type: 'success', message: 'Document uploaded successfully. The parser is processing it.' });
+
+      if (uploaded.status === 'NEEDS_REVIEW') {
+        showToast({
+          type: 'success',
+          message: canReview
+            ? 'Document uploaded and parsed. Review the extracted fields before approval.'
+            : 'Document uploaded and is waiting for administrator review.',
+        });
+        if (canReview) {
+          setReviewState(reviewStateFor(uploaded, 'APPROVE'));
+        }
+      } else if (uploaded.status === 'PARSING_FAILED') {
+        const parserMessage = uploaded.extraction?.errorMessage ?? 'Automatic parsing failed.';
+        showToast({
+          type: 'error',
+          message: `Document uploaded, but parser failed: ${parserMessage}`,
+          durationMs: 7000,
+        });
+        if (canReview) {
+          setReviewState(reviewStateFor(uploaded, 'REJECT'));
+        }
+      } else {
+        showToast({ type: 'success', message: 'Document uploaded successfully.' });
+      }
+
       load();
     } catch (err: unknown) {
       // Toast is shown by the axios interceptor; do NOT logout — just surface the error.
@@ -310,14 +345,7 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
   // ── Review ──────────────────────────────────────────────────────────────────
 
   const startReview = (doc: DocumentResponse, decision: 'APPROVE' | 'REJECT') => {
-    setReviewState({
-      docId: doc.id,
-      decision,
-      fields: fieldsFromExtraction(doc.extraction),
-      comment: '',
-      loading: false,
-      error: null,
-    });
+    setReviewState(reviewStateFor(doc, decision));
   };
 
   const cancelReview = () => setReviewState(null);
@@ -465,6 +493,7 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
                 {/* Info folder — available once parsing has produced some output */}
                 {(doc.status === 'VALIDATED' ||
                   doc.status === 'NEEDS_REVIEW' ||
+                  doc.status === 'PARSING_FAILED' ||
                   doc.approvedData != null) && (
                   <button
                     type="button"
@@ -477,15 +506,17 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
                   </button>
                 )}
 
-                {canReview && doc.status === 'NEEDS_REVIEW' && !reviewing && (
+                {canReview && (doc.status === 'NEEDS_REVIEW' || doc.status === 'PARSING_FAILED') && !reviewing && (
                   <>
-                    <button
-                      type="button"
-                      className="btn btn-success"
-                      onClick={() => startReview(doc, 'APPROVE')}
-                    >
-                      Approve
-                    </button>
+                    {doc.status === 'NEEDS_REVIEW' && (
+                      <button
+                        type="button"
+                        className="btn btn-success"
+                        onClick={() => startReview(doc, 'APPROVE')}
+                      >
+                        Approve
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn btn-danger"

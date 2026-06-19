@@ -1,6 +1,7 @@
 package com.fleet.auth.service;
 
 import com.fleet.auth.config.BootstrapAdminProperties;
+import com.fleet.auth.dto.AssignBusinessUserRequest;
 import com.fleet.auth.dto.BusinessRequest;
 import com.fleet.auth.dto.BusinessResponse;
 import com.fleet.auth.dto.CreateBusinessUserRequest;
@@ -51,14 +52,33 @@ public class UserInfoService implements UserDetailsService {
 
     @Transactional
     public MeResponse register(RegisterRequest registerRequest) {
-        throw new IllegalArgumentException("Public registration is disabled. Ask a business admin to create your account.");
+        validateUniqueUser(registerRequest.username(), registerRequest.email());
+
+        Credential credential = Credential.builder()
+                .username(registerRequest.username().trim())
+                .passwordHash(passwordEncoder.encode(registerRequest.password()))
+                .role(getOrCreateRole(Role.EMPLOYEE))
+                .build();
+        Credential savedCredential = credentialRepository.save(credential);
+
+        UserData userData = UserData.builder()
+                .credential(savedCredential)
+                .email(registerRequest.email().trim())
+                .phone(normalizeOptional(registerRequest.phone()))
+                .address(normalizeOptional(registerRequest.address()))
+                .business(null)
+                .build();
+
+        UserData savedUserData = userDataRepository.save(userData);
+        savedCredential.setUserData(savedUserData);
+        return toMeResponse(savedUserData);
     }
 
     @Transactional
     public BusinessResponse createBusiness(BusinessRequest request, Authentication authentication) {
         requireSuperadmin(authentication);
         if (businessRepository.existsByNameIgnoreCase(request.name())) {
-            throw new DuplicateUserException("Business name is already registered");
+            throw new DuplicateUserException("Organization name is already registered");
         }
         Business business = Business.builder()
                 .name(normalizeRequired(request.name()))
@@ -104,16 +124,16 @@ public class UserInfoService implements UserDetailsService {
     public MeResponse createBusinessUser(Long businessId, CreateBusinessUserRequest request, Authentication authentication) {
         requireCanManageBusiness(businessId, authentication);
         if (request.role() == Role.SUPERADMIN) {
-            throw new IllegalArgumentException("Business users cannot have SUPERADMIN role");
+            throw new IllegalArgumentException("Organization users cannot have SUPERADMIN role");
         }
         validateUniqueUser(request.username(), request.email());
         Business business = getBusinessEntity(businessId);
         if (!business.isActive()) {
-            throw new IllegalArgumentException("Business is inactive");
+            throw new IllegalArgumentException("Organization is inactive");
         }
 
         Credential credential = Credential.builder()
-                .username(request.username())
+                .username(request.username().trim())
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .role(getOrCreateRole(request.role()))
                 .build();
@@ -121,9 +141,9 @@ public class UserInfoService implements UserDetailsService {
 
         UserData userData = UserData.builder()
                 .credential(savedCredential)
-                .email(request.email())
-                .phone(request.phone())
-                .address(request.address())
+                .email(request.email().trim())
+                .phone(normalizeOptional(request.phone()))
+                .address(normalizeOptional(request.address()))
                 .business(business)
                 .build();
 
@@ -136,7 +156,7 @@ public class UserInfoService implements UserDetailsService {
     public MeResponse updateRole(Long businessId, Long userId, Role role, Authentication authentication) {
         requireCanManageBusiness(businessId, authentication);
         if (role == Role.SUPERADMIN) {
-            throw new IllegalArgumentException("Business users cannot have SUPERADMIN role");
+            throw new IllegalArgumentException("Organization users cannot have SUPERADMIN role");
         }
         UserData userData = userDataRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
@@ -152,6 +172,41 @@ public class UserInfoService implements UserDetailsService {
         return userDataRepository.findByBusinessIdOrderByCredentialUsernameAsc(businessId).stream()
                 .map(this::toMeResponse)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<MeResponse> listUnassignedUsers(Authentication authentication) {
+        requireSuperadmin(authentication);
+        return userDataRepository.findByBusinessIsNullOrderByCredentialUsernameAsc().stream()
+                .filter(userData -> userData.getCredential().getRole().getRoleName().canonical() != Role.SUPERADMIN)
+                .map(this::toMeResponse)
+                .toList();
+    }
+
+    @Transactional
+    public MeResponse assignUnassignedUser(Long userId, AssignBusinessUserRequest request, Authentication authentication) {
+        requireSuperadmin(authentication);
+        if (request.role() == Role.SUPERADMIN) {
+            throw new IllegalArgumentException("Organization users cannot have SUPERADMIN role");
+        }
+
+        UserData userData = getUserData(userId);
+        if (userData.getCredential().getRole().getRoleName().canonical() == Role.SUPERADMIN) {
+            throw new IllegalArgumentException("SUPERADMIN users cannot be assigned to an organization");
+        }
+        if (userData.getBusiness() != null) {
+            throw new IllegalArgumentException("User is already assigned to an organization");
+        }
+
+        Business business = getBusinessEntity(request.businessId());
+        if (!business.isActive()) {
+            throw new IllegalArgumentException("Organization is inactive");
+        }
+
+        userData.setBusiness(business);
+        userData.getCredential().setRole(getOrCreateRole(request.role()));
+        credentialRepository.save(userData.getCredential());
+        return toMeResponse(userDataRepository.save(userData));
     }
 
     @Transactional(readOnly = true)
@@ -299,7 +354,7 @@ public class UserInfoService implements UserDetailsService {
 
     private Business getBusinessEntity(Long businessId) {
         return businessRepository.findById(businessId)
-                .orElseThrow(() -> new ResourceNotFoundException("Business not found: " + businessId));
+                .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + businessId));
     }
 
     private void assertSameBusiness(Long businessId, UserData userData) {

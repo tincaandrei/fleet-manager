@@ -119,6 +119,7 @@ export default function ProfilePage() {
                 <tr><th>Phone</th><td>{profile.phone}</td></tr>
                 <tr><th>Address</th><td>{profile.address}</td></tr>
                 <tr><th>Role</th><td><span className="badge">{profile.role}</span></td></tr>
+                <tr><th>Organization</th><td>{profile.businessName ?? 'Pending assignment'}</td></tr>
               </tbody>
             </table>
 

@@ -17,9 +17,9 @@ export default function Navbar() {
 
   const navItems = useMemo<NavItem[]>(
     () => [
-      // SUPERADMIN: business management
+      // SUPERADMIN: organization management
       {
-        label: 'Businesses',
+        label: 'Organizations',
         to: '/businesses',
         activePrefix: '/businesses',
         visible: isSuperAdmin,
@@ -85,7 +85,7 @@ export default function Navbar() {
   const roleLabel = role === 'SUPERADMIN'
     ? 'Super Admin'
     : role === 'BUSINESS_ADMIN'
-    ? 'Business Admin'
+    ? 'Organization Admin'
     : role === 'EMPLOYEE'
     ? 'Employee'
     : role ?? '';

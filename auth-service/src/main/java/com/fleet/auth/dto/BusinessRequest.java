@@ -5,8 +5,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 public record BusinessRequest(
-        @NotBlank(message = "Business name is required")
-        @Size(max = 160, message = "Business name must be at most 160 characters")
+        @NotBlank(message = "Organization name is required")
+        @Size(max = 160, message = "Organization name must be at most 160 characters")
         String name,
         @Size(max = 80, message = "Registration number must be at most 80 characters")
         String registrationNumber,

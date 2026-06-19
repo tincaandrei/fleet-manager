@@ -12,13 +12,14 @@ import DocumentAlertsPage from './pages/DocumentAlertsPage';
 import BusinessesPage from './pages/BusinessesPage';
 import BusinessCreateEditPage from './pages/BusinessCreateEditPage';
 import BusinessUsersPage from './pages/BusinessUsersPage';
+import PendingOrganizationPage from './pages/PendingOrganizationPage';
 import ToastProvider from './components/ToastProvider';
 import { useAuth } from './auth/AuthContext';
 import { homeForRole } from './auth/roleHome';
 
 function RoleHomeRedirect() {
-  const { token, role } = useAuth();
-  return <Navigate to={token ? homeForRole(role) : '/login'} replace />;
+  const { token, role, businessId } = useAuth();
+  return <Navigate to={token ? homeForRole(role, businessId) : '/login'} replace />;
 }
 
 export default function App() {
@@ -33,6 +34,7 @@ export default function App() {
             <Route path="/" element={<RoleHomeRedirect />} />
 
             {/* All authenticated users */}
+            <Route path="/pending-organization" element={<ProtectedRoute><PendingOrganizationPage /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
             <Route path="/vehicles" element={<ProtectedRoute><VehiclesPage /></ProtectedRoute>} />
             <Route path="/vehicles/:id" element={<ProtectedRoute><VehicleDetailsPage /></ProtectedRoute>} />

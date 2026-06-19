@@ -11,7 +11,7 @@ function apiMessage(err: unknown, fallback: string): string {
 }
 
 const ROLE_OPTIONS: Array<{ value: 'BUSINESS_ADMIN' | 'EMPLOYEE'; label: string }> = [
-  { value: 'BUSINESS_ADMIN', label: 'Business Admin' },
+  { value: 'BUSINESS_ADMIN', label: 'Organization Admin' },
   { value: 'EMPLOYEE',       label: 'Employee' },
 ];
 
@@ -181,7 +181,7 @@ export default function BusinessUsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // BUSINESS_ADMIN can only see their own business users
+  // BUSINESS_ADMIN can only see their own organization users
   const canManage = isSuperAdmin || (isBusinessAdmin && myBusinessId === businessId);
 
   const load = () => {
@@ -212,7 +212,7 @@ export default function BusinessUsersPage() {
       <>
         <Navbar />
         <main className="page">
-          <p className="error">Access denied. You can only manage users in your own business.</p>
+          <p className="error">Access denied. You can only manage users in your own organization.</p>
         </main>
       </>
     );
@@ -223,13 +223,13 @@ export default function BusinessUsersPage() {
       <Navbar />
       <main className="page">
         <div className="page-header">
-          <h1>Business Users</h1>
+          <h1>Organization Users</h1>
           {isSuperAdmin && (
-            <Link to="/businesses">← Businesses</Link>
+            <Link to="/businesses">Back to Organizations</Link>
           )}
         </div>
 
-        <p className="info-note">Business ID: {businessId}</p>
+        <p className="info-note">Organization ID: {businessId}</p>
 
         {loading && <p className="doc-empty">Loading users…</p>}
         {!loading && error && <p className="error">{error}</p>}
@@ -237,7 +237,7 @@ export default function BusinessUsersPage() {
         {!loading && !error && (
           <>
             {users.length === 0 ? (
-              <p className="doc-empty">No users in this business yet.</p>
+              <p className="doc-empty">No users in this organization yet.</p>
             ) : (
               <table className="vehicles-table">
                 <thead>

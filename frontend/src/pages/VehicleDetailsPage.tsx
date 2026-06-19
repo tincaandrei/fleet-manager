@@ -98,7 +98,7 @@ export default function VehicleDetailsPage() {
                   <tr><th>Assigned User ID</th><td>{vehicle.assignedUserId ?? '—'}</td></tr>
                   <tr><th>Mileage</th><td>{vehicle.currentMileage.toLocaleString()} km</td></tr>
                   {vehicle.businessId != null && (
-                    <tr><th>Business ID</th><td>{vehicle.businessId}</td></tr>
+                    <tr><th>Organization ID</th><td>{vehicle.businessId}</td></tr>
                   )}
                   <tr><th>Created</th><td>{new Date(vehicle.createdAt).toLocaleString()}</td></tr>
                   <tr><th>Updated</th><td>{new Date(vehicle.updatedAt).toLocaleString()}</td></tr>

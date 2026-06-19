@@ -7,6 +7,7 @@ import type {
   Business,
   BusinessRequest,
   BusinessUser,
+  AssignBusinessUserRequest,
   CreateBusinessUserRequest,
   UpdateRoleRequest,
   UpdateUserRequest,
@@ -28,6 +29,12 @@ export const updateMe = (data: UpdateUserRequest) =>
 
 export const updateUser = (userId: number, data: UpdateUserRequest) =>
   api.put<UserProfile>(`/api/auth/users/${userId}`, data);
+
+export const listUnassignedUsers = () =>
+  api.get<UserProfile[]>('/api/auth/users/unassigned');
+
+export const assignUnassignedUser = (userId: number, data: AssignBusinessUserRequest) =>
+  api.put<UserProfile>(`/api/auth/users/${userId}/assignment`, data);
 
 // ── Business management (SUPERADMIN) ─────────────────────────────────────────
 

@@ -15,6 +15,7 @@ export type CanonicalSubtype = 'RCA' | 'ITP' | 'ROVINIETA' | 'UNKNOWN';
 
 export type DocumentStatus =
   | 'PARSING'
+  | 'PARSING_FAILED'
   | 'NEEDS_REVIEW'
   | 'VALIDATED'
   | 'REJECTED'

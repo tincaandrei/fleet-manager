@@ -1,6 +1,7 @@
 package com.fleet.auth.controller;
 
 import com.fleet.auth.dto.AuthResponse;
+import com.fleet.auth.dto.AssignBusinessUserRequest;
 import com.fleet.auth.dto.BusinessRequest;
 import com.fleet.auth.dto.BusinessResponse;
 import com.fleet.auth.dto.CreateBusinessUserRequest;
@@ -179,6 +180,24 @@ public class UserController {
     public ResponseEntity<List<MeResponse>> listBusinessUsers(@PathVariable Long businessId,
                                                               Authentication authentication) {
         return ResponseEntity.ok(userInfoService.listBusinessUsers(businessId, authentication));
+    }
+
+    @GetMapping("/users/unassigned")
+    @Operation(summary = "List unassigned users", description = "Requires SUPERADMIN.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<List<MeResponse>> listUnassignedUsers(Authentication authentication) {
+        return ResponseEntity.ok(userInfoService.listUnassignedUsers(authentication));
+    }
+
+    @PutMapping("/users/{id}/assignment")
+    @Operation(summary = "Assign unassigned user to organization", description = "Requires SUPERADMIN.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<MeResponse> assignUser(
+            @Parameter(description = "User id to assign.", example = "1") @PathVariable Long id,
+            @Valid @RequestBody AssignBusinessUserRequest request,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(userInfoService.assignUnassignedUser(id, request, authentication));
     }
 
     @PutMapping("/businesses/{businessId}/users/{id}")
