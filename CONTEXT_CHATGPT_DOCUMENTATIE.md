@@ -2,7 +2,7 @@
 
 Acest document este un rezumat al proiectului **Fleet Manager** si poate fi folosit ca prompt/context initial pentru ChatGPT atunci cand redactez capitolele lucrarii de licenta. Scopul este ca asistentul sa inteleaga rapid domeniul, arhitectura, functionalitatile si stadiul implementarii, fara sa fie nevoie sa analizeze din nou intregul cod sursa.
 
-Important: nu include in documentatie valori reale din `.env`, parole, secrete JWT sau chei interne. Foloseste doar denumiri generice precum `JWT_SECRET`, `PARSER_INTERNAL_API_KEY`, `DOCUMENT_DB_PASSWORD`.
+Important: nu include in documentatie valori reale din `.env`, parole, secrete JWT sau chei interne. Foloseste doar denumiri generice precum `JWT_SECRET`, `DOCUMENT_DB_PASSWORD` sau `OLLAMA_MODEL`.
 
 ## 1. Tema proiectului
 
@@ -32,7 +32,7 @@ Obiective specifice:
 - implementarea autentificarii prin JWT si a autorizarii pe roluri;
 - dezvoltarea unui registru de vehicule cu operatii CRUD, filtrare si alocare;
 - implementarea unui serviciu de documente pentru incarcarea fisierelor PDF, stocarea metadatelor si fluxul de aprobare;
-- integrarea unui serviciu de parsare care extrage informatii structurate din documente auto;
+- integrarea parsarii automate in serviciul de documente, pentru extragerea informatiilor structurate din documente auto;
 - folosirea unei baze de date PostgreSQL separate pentru fiecare domeniu principal;
 - expunerea serviciilor printr-un API Gateway Traefik;
 - realizarea unei interfete web React pentru autentificare, administrarea vehiculelor, detalii vehicul, documente si alerte;
@@ -72,8 +72,8 @@ Document parsing:
 - Apache PDFBox pentru extragerea textului din PDF;
 - serviciu OCR abstractizat, cu implementare stub in proiect;
 - Ollama ca runtime local pentru model LLM;
-- model configurabil prin variabila `PARSER_OLLAMA_MODEL`, implicit `qwen2.5:3b`;
-- strategii dedicate pentru tipuri de documente precum RCA, ITP, CIV, rovinieta si facturi.
+- model configurabil prin variabila `OLLAMA_MODEL`, implicit `qwen2.5:3b`;
+- logica dedicata pentru tipuri de documente precum RCA, ITP, rovinieta si facturi.
 
 Infrastructura:
 
@@ -89,7 +89,6 @@ Repository-ul contine urmatoarele componente principale:
 - `auth-service/` - microserviciu pentru autentificare, profil utilizator si roluri;
 - `fleet-service/` - microserviciu pentru registrul de vehicule;
 - `document-service/` - microserviciu pentru documente, review si date aprobate;
-- `parser-service/` - microserviciu intern pentru extragerea datelor din PDF-uri;
 - `frontend/` - aplicatie React/Vite;
 - `traefik/` - configuratie statica si dinamica pentru gateway;
 - `docker-compose.yml` - orchestrarea serviciilor, bazelor de date si componentelor auxiliare;
@@ -106,7 +105,7 @@ Componente:
 - Auth Service: autentificare, inregistrare, token JWT, roluri;
 - Fleet Service: gestiunea vehiculelor;
 - Document Service: incarcarea si validarea documentelor;
-- Parser Service: extragerea automata a datelor din PDF;
+- Ollama: runtime local folosit de Document Service pentru extragerea automata a datelor din PDF;
 - PostgreSQL: baze de date separate pentru auth, fleet si document;
 - Ollama: runtime local pentru modelul LLM folosit la parsare;
 - RabbitMQ: inclus in infrastructura Docker, pregatit pentru comunicare asincrona, chiar daca fluxul curent foloseste apeluri HTTP directe.
@@ -209,7 +208,7 @@ Responsabilitati:
 - verificarea existentei vehiculului prin Fleet Service;
 - stocare fisier local in volum Docker configurat;
 - stocare metadate document in PostgreSQL;
-- trimitere document catre Parser Service;
+- parsarea documentului prin `DocumentParsingService`;
 - salvarea rezultatului de parsare ca draft;
 - flux de review pentru STAFF/ADMIN;
 - aprobare sau respingere document;
@@ -258,63 +257,40 @@ Tipuri de documente in Document Service:
 - `REGISTRATION`;
 - `OTHER`.
 
-## 9. Parser Service
+## 9. Parsarea documentelor in Document Service
 
-Parser Service este un microserviciu intern. El nu este destinat utilizarii directe de catre utilizatori, ci este apelat de Document Service.
+In versiunea curenta, parsarea documentelor este implementata direct in `document-service`, prin componenta `DocumentParsingService`. Nu exista un microserviciu parser separat in stack-ul Docker activ.
 
 Responsabilitati:
 
-- primeste PDF-ul si metadatele documentului;
-- valideaza fisierul;
-- extrage text cu PDFBox;
-- foloseste OCR daca textul extras nu este suficient si OCR este activat;
-- detecteaza tipul documentului;
-- selecteaza strategia de extragere potrivita;
+- incarca PDF-ul salvat de Document Service;
+- extrage text cu Apache PDFBox;
+- detecteaza tipul documentului pe baza textului extras;
 - construieste promptul pentru modelul LLM;
-- apeleaza Ollama;
+- apeleaza Ollama prin HTTP;
 - normalizeaza raspunsul JSON;
 - valideaza campurile extrase;
 - calculeaza un scor de incredere;
-- returneaza un raspuns stabil catre Document Service.
+- salveaza rezultatul ca draft de extragere in baza de date Document Service.
 
-Endpointuri:
-
-- `GET /health`;
-- `GET /me`;
-- `POST /documents/extract`.
-
-Endpointul de extragere este protejat prin header intern:
-
-- `X-Internal-Api-Key`.
-
-Tipuri detectate in Parser Service:
+Tipuri detectate:
 
 - `INSURANCE`, cu subtip `RCA`;
 - `TECHNICAL_INSPECTION`, cu subtip `ITP`;
-- `VEHICLE_IDENTITY_CARD`, cu subtip `CIV`;
 - `ROAD_TAX`, cu subtip `ROVINIETA`;
 - `EXPENSE_INVOICE`;
 - `OTHER`.
-
-Strategii existente:
-
-- `RcaExtractionStrategy`;
-- `ItpExtractionStrategy`;
-- `CivExtractionStrategy`;
-- `RovinietaExtractionStrategy`;
-- `ExpenseInvoiceExtractionStrategy`;
-- `GenericExtractionStrategy`.
-
-Metode de extragere:
-
-- `PDF_TEXT`;
-- `OCR`;
-- `PDF_TEXT_AND_OCR`.
 
 Statusuri parser:
 
 - `PARSED`;
 - `FAILED`.
+
+Rezultatul parsarii este folosit in fluxul de review:
+
+- daca datele sunt extrase cu succes, documentul trece in `NEEDS_REVIEW`;
+- daca parsarea esueaza, documentul trece in `PARSING_FAILED`;
+- un administrator poate aproba sau respinge datele extrase.
 
 ## 10. Fluxuri functionale principale
 
@@ -339,9 +315,9 @@ Statusuri parser:
 2. Document Service verifica daca vehiculul exista prin Fleet Service.
 3. Document Service salveaza fisierul si metadatele documentului.
 4. Documentul primeste statusul `PARSING`.
-5. Document Service trimite PDF-ul catre Parser Service.
-6. Parser Service extrage textul, detecteaza tipul documentului si apeleaza LLM-ul prin Ollama.
-7. Parser Service returneaza date structurate, scor de incredere si eventuale avertismente.
+5. `DocumentParsingService` incarca PDF-ul salvat, extrage textul, detecteaza tipul documentului si apeleaza LLM-ul prin Ollama.
+6. Rezultatul parsarii contine date structurate, scor de incredere si eventuale avertismente.
+7. Document Service transforma rezultatul in draft de extragere.
 8. Document Service salveaza rezultatul in `DocumentExtractionDraft`.
 9. Daca parsarea este valida, documentul devine `NEEDS_REVIEW`; altfel devine `PARSING_FAILED`.
 
@@ -402,7 +378,7 @@ Securitatea aplicatiei este bazata pe:
 - validare JWT in fiecare microserviciu;
 - roluri si reguli de acces;
 - separarea endpointurilor publice de cele protejate;
-- API key interna pentru apelurile dintre Document Service si Parser Service;
+- apelurile interne intre servicii sunt protejate prin JWT si reteaua Docker interna;
 - CORS si headere de securitate configurate prin Traefik.
 
 Reguli orientative:
@@ -433,7 +409,7 @@ Traefik este folosit ca API Gateway si expune serviciile prin rute comune:
 - `/api/auth/**`;
 - `/api/fleet/**`;
 - `/api/documents/**`;
-- ruta interna/configurata pentru parser, folosita de servicii.
+- rute interne pentru verificari intre servicii, precum endpointurile Fleet Service folosite de Document Service.
 
 Docker Compose porneste:
 
@@ -441,7 +417,6 @@ Docker Compose porneste:
 - Auth Service si baza sa PostgreSQL;
 - Fleet Service si baza sa PostgreSQL;
 - Document Service si baza sa PostgreSQL;
-- Parser Service;
 - RabbitMQ;
 - Ollama.
 
@@ -459,7 +434,7 @@ Proiectul contine teste automate pentru componente precum:
 
 - Auth Service: integrare autentificare, JWT, roluri, repository;
 - Document Service: stocare documente si logica de documente;
-- Parser Service: detectarea tipului de document si controllerul parser;
+- Document Service: stocare documente, parsare, review si fluxuri de aprobare;
 - Fleet Service: structura este pregatita pentru testare prin Spring Boot si Spring Security Test.
 
 Tipuri de testare ce pot fi descrise in lucrare:
@@ -484,7 +459,7 @@ Limitari actuale:
 Directii viitoare:
 
 - notificari automate pentru documente care expira;
-- comunicare asincrona intre Document Service si Parser Service prin RabbitMQ;
+- comunicare asincrona pentru operatii de fundal prin RabbitMQ;
 - OCR real pentru PDF-uri scanate;
 - audit trail pentru operatii administrative;
 - dashboard cu statistici despre flota;
@@ -557,7 +532,7 @@ Anexe posibile:
 Poti copia textul urmator intr-o conversatie noua:
 
 ```text
-Vreau sa ma ajuti sa redactez documentatia pentru lucrarea mea de licenta. Tema este o aplicatie web numita Fleet Manager, pentru managementul flotelor auto, dezvoltata cu microservicii Spring Boot, PostgreSQL, React, Docker Compose, Traefik si un parser intern pentru documente PDF bazat pe PDFBox si Ollama.
+Vreau sa ma ajuti sa redactez documentatia pentru lucrarea mea de licenta. Tema este o aplicatie web numita Fleet Manager, pentru managementul flotelor auto, dezvoltata cu microservicii Spring Boot, PostgreSQL, React, Docker Compose, Traefik si parsare interna de documente PDF in Document Service, bazata pe PDFBox si Ollama.
 
 Foloseste contextul tehnic de mai jos ca sursa principala. Redacteaza in limba romana, intr-un stil academic, clar si coerent. Nu inventa functionalitati care nu sunt mentionate. Cand informatia nu este suficienta, intreaba-ma.
 
@@ -581,7 +556,7 @@ Mai intai propune-mi o structura detaliata pentru capitolul la care lucram, apoi
 - Mentioneaza clar ca datele extrase automat din documente nu devin oficiale imediat, ci necesita review manual.
 - Explica de ce JSONB este util pentru documente cu structuri diferite.
 - Explica rolul API Gateway-ului in rutare, securitate si centralizarea accesului.
-- Explica faptul ca Parser Service este intern si este protejat prin API key.
+- Explica faptul ca parsarea este o componenta interna a Document Service si foloseste Ollama ca runtime local.
 - Nu prezenta LLM-ul ca mecanism perfect; subliniaza necesitatea validarii umane.
 - Nu include secrete, parole sau valori reale din configurarea locala.
 - Daca folosesti exemple de cod in anexe, alege fragmente scurte si relevante.
