@@ -67,7 +67,7 @@ public class DocumentController {
     @PostMapping(path = {"", "/"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload document", description = "Uploads a PDF for a vehicle, stores it, and marks it as PARSING.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Document uploaded", content = @Content(schema = @Schema(implementation = DocumentResponse.class))),
+            @ApiResponse(responseCode = "202", description = "Document uploaded and parsing queued", content = @Content(schema = @Schema(implementation = DocumentResponse.class))),
             @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "Authentication required"),
             @ApiResponse(responseCode = "403", description = "Role is not allowed to upload")
@@ -80,7 +80,7 @@ public class DocumentController {
             HttpServletRequest servletRequest,
             Authentication authentication
     ) {
-        return ResponseEntity.ok(documentService.upload(
+        return ResponseEntity.accepted().body(documentService.upload(
                 file,
                 vehicleId,
                 servletRequest.getHeader(HttpHeaders.AUTHORIZATION),

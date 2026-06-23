@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { register } from '../api/authApi';
+import { getApiErrorMessage } from '../utils/apiError';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -24,8 +25,8 @@ export default function RegisterPage() {
     try {
       await register(form);
       navigate('/login');
-    } catch (err: any) {
-      setError(err.response?.data?.message ?? 'Registration failed.');
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Registration failed.'));
     } finally {
       setLoading(false);
     }
@@ -98,7 +99,7 @@ export default function RegisterPage() {
           </label>
 
           <button type="submit" disabled={loading}>
-            {loading ? 'Registering…' : 'Register'}
+            {loading ? 'Registering...' : 'Register'}
           </button>
         </form>
 

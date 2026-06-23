@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import type { DocumentResponse, DocumentExtractionResponse } from '../types/document';
 import {
   listDocumentsByVehicle,
@@ -7,7 +7,7 @@ import {
   reviewDocument,
   archiveDocument,
 } from '../api/documentApi';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/useAuth';
 import DocumentInfoFolderPanel from './DocumentInfoFolder';
 import { showToast } from '../utils/toast';
 
@@ -27,7 +27,13 @@ interface ReviewFields {
   policyNumber: string;
   inspectionNumber: string;
   invoiceNumber: string;
+  category: string;
+  issuer: string;
+  transactionId: string;
   totalAmount: string;
+  amount: string;
+  currency: string;
+  expenseCategory: string;
 }
 
 interface ReviewState {
@@ -38,6 +44,11 @@ interface ReviewState {
   loading: boolean;
   error: string | null;
 }
+
+type UploadNotice = {
+  type: 'info' | 'success' | 'error';
+  message: string;
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -64,6 +75,11 @@ function str(val: unknown): string {
   return '';
 }
 
+function dateOnly(val: unknown): string {
+  const value = str(val).trim();
+  return /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : value;
+}
+
 /**
  * Pre-populate ReviewFields from parser extraction data.
  */
@@ -76,12 +92,18 @@ function fieldsFromExtraction(
     subtype: str(data['subtype']) || extraction?.detectedSubtype || '',
     licensePlate: str(data['licensePlate']),
     vin: str(data['vin']),
-    validFrom: str(data['validFrom']),
-    validUntil: str(data['validUntil']),
+    validFrom: dateOnly(data['validFrom']),
+    validUntil: dateOnly(data['validUntil']),
     policyNumber: str(data['policyNumber']),
     inspectionNumber: str(data['inspectionNumber']),
     invoiceNumber: str(data['invoiceNumber']),
+    category: str(data['category']),
+    issuer: str(data['issuer']),
+    transactionId: str(data['transactionId']),
     totalAmount: str(data['totalAmount']),
+    amount: str(data['amount']),
+    currency: str(data['currency']),
+    expenseCategory: str(data['expenseCategory']),
   };
 }
 
@@ -94,6 +116,10 @@ function reviewStateFor(doc: DocumentResponse, decision: 'APPROVE' | 'REJECT'): 
     loading: false,
     error: null,
   };
+}
+
+function parserFailureMessage(doc: DocumentResponse): string {
+  return doc.extraction?.errorMessage ?? 'Automatic parsing failed. The uploaded PDF is stored, but no structured data could be extracted.';
 }
 
 /**
@@ -112,8 +138,103 @@ function buildApprovedData(fields: ReviewFields): Record<string, unknown> {
   add('policyNumber', fields.policyNumber);
   add('inspectionNumber', fields.inspectionNumber);
   add('invoiceNumber', fields.invoiceNumber);
+  add('category', fields.category);
+  add('issuer', fields.issuer);
+  add('transactionId', fields.transactionId);
   add('totalAmount', fields.totalAmount);
+  add('amount', fields.amount);
+  add('currency', fields.currency);
+  add('expenseCategory', fields.expenseCategory);
   return obj;
+}
+
+function formatExtractedValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '-';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return JSON.stringify(value);
+}
+
+function humanizeKey(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function ExtractedDataPreview({ extraction }: { extraction: DocumentExtractionResponse | null | undefined }) {
+  const data = extraction?.extractedData;
+  if (!data || Object.keys(data).length === 0) {
+    return null;
+  }
+
+  const priority = [
+    'documentType',
+    'subtype',
+    'licensePlate',
+    'vin',
+    'validFrom',
+    'validUntil',
+    'category',
+    'issuer',
+    'transactionId',
+    'amount',
+    'currency',
+    'invoiceNumber',
+    'invoiceDate',
+    'supplierName',
+    'totalAmount',
+    'expenseCategory',
+  ];
+  const keys = [
+    ...priority.filter((key) => Object.prototype.hasOwnProperty.call(data, key)),
+    ...Object.keys(data).filter((key) => !priority.includes(key)),
+  ];
+
+  return (
+    <div className="extracted-preview">
+      <strong>Extracted parser data</strong>
+      <div className="extracted-preview-grid">
+        {keys.map((key) => (
+          <div key={key} className="extracted-preview-row">
+            <span>{humanizeKey(key)}</span>
+            <code>{formatExtractedValue(data[key])}</code>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ParsedDocumentSummary({ extraction }: { extraction: DocumentExtractionResponse | null | undefined }) {
+  const data = extraction?.extractedData;
+  if (!data || Object.keys(data).length === 0) {
+    return null;
+  }
+
+  const summary = [
+    ['License plate', str(data['licensePlate'])],
+    ['VIN', str(data['vin'])],
+    ['Valid from', dateOnly(data['validFrom'])],
+    ['Valid until', dateOnly(data['validUntil'])],
+    ['Category', str(data['category'])],
+    ['Issuer', str(data['issuer'])],
+  ].filter(([, value]) => value);
+
+  if (summary.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="doc-extracted-summary">
+      {summary.map(([label, value]) => (
+        <span key={label}>
+          <strong>{label}:</strong> {value}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 // ── Review form sub-component ─────────────────────────────────────────────────
@@ -152,6 +273,8 @@ function ReviewForm({
     <div className="doc-review-form">
       {state.decision === 'APPROVE' ? (
         <>
+          <ExtractedDataPreview extraction={extraction} />
+
           <div className="doc-review-fields">
             {field('Document type', 'documentType')}
             {field('Subtype', 'subtype', 'e.g. RCA, ITP, ROVINIETA')}
@@ -159,10 +282,16 @@ function ReviewForm({
             {field('VIN', 'vin')}
             {field('Valid from', 'validFrom', 'YYYY-MM-DD')}
             {field('Valid until', 'validUntil', 'YYYY-MM-DD')}
+            {field('Category', 'category')}
+            {field('Issuer', 'issuer')}
+            {field('Transaction ID', 'transactionId')}
+            {field('Amount', 'amount')}
+            {field('Currency', 'currency')}
             {field('Policy number', 'policyNumber')}
             {field('Inspection number', 'inspectionNumber')}
             {field('Invoice number', 'invoiceNumber')}
             {field('Total amount', 'totalAmount')}
+            {field('Expense category', 'expenseCategory')}
           </div>
 
           <label className="review-field-label">
@@ -250,6 +379,8 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
 
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadNotice, setUploadNotice] = useState<UploadNotice | null>(null);
+  const [trackedUploadId, setTrackedUploadId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [reviewState, setReviewState] = useState<ReviewState | null>(null);
@@ -258,32 +389,85 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
   /** The document ID whose info folder is currently open, or null. */
   const [infoFolderDocId, setInfoFolderDocId] = useState<string | null>(null);
 
-  const load = () => {
-    setLoading(true);
-    setError(null);
-    listDocumentsByVehicle(vehicleId)
-      .then((res) => setDocs(res.data))
-      .catch((err: unknown) => setError(apiMessage(err, 'Failed to load documents.')))
-      .finally(() => setLoading(false));
-  };
+  const load = useCallback((showSpinner = true) => {
+    if (showSpinner) {
+      setLoading(true);
+      setError(null);
+    }
+    return listDocumentsByVehicle(vehicleId)
+      .then((res) => {
+        setDocs(res.data);
+        return res.data;
+      })
+      .catch((err: unknown) => {
+        if (showSpinner) {
+          setError(apiMessage(err, 'Failed to load documents.'));
+        }
+        return [];
+      })
+      .finally(() => {
+        if (showSpinner) {
+          setLoading(false);
+        }
+      });
+  }, [vehicleId]);
 
   useEffect(() => {
     load();
-  }, [vehicleId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [load]);
+
+  useEffect(() => {
+    if (!docs.some((doc) => doc.status === 'PARSING')) return undefined;
+    const intervalId = window.setInterval(() => {
+      void load(false);
+    }, 3000);
+    return () => window.clearInterval(intervalId);
+  }, [docs, load]);
+
+  useEffect(() => {
+    if (!trackedUploadId) return;
+    const uploadedDoc = docs.find((doc) => doc.id === trackedUploadId);
+    if (!uploadedDoc || uploadedDoc.status === 'PARSING') return;
+
+    if (uploadedDoc.status === 'PARSING_FAILED') {
+      const message = `Document uploaded, but parser failed: ${parserFailureMessage(uploadedDoc)}`;
+      setUploadNotice({ type: 'error', message });
+      showToast({ type: 'error', message, durationMs: 7000 });
+      if (canReview) {
+        setReviewState(reviewStateFor(uploadedDoc, 'REJECT'));
+      }
+    } else if (uploadedDoc.status === 'NEEDS_REVIEW') {
+      const message = canReview
+        ? 'Document uploaded and parsed. Review the extracted fields before approval.'
+        : 'Document uploaded and is waiting for administrator review.';
+      setUploadNotice({ type: 'success', message });
+      showToast({ type: 'success', message });
+      if (canReview) {
+        setReviewState(reviewStateFor(uploadedDoc, 'APPROVE'));
+      }
+    } else {
+      setUploadNotice({ type: 'success', message: 'Document processing finished.' });
+    }
+    setTrackedUploadId(null);
+  }, [canReview, docs, trackedUploadId]);
 
   // ── Upload ──────────────────────────────────────────────────────────────────
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!uploadFile) {
+      setUploadNotice({ type: 'error', message: 'Please select a PDF file.' });
       showToast({ type: 'error', message: 'Please select a PDF file.' });
       return;
     }
     if (!uploadFile.name.toLowerCase().endsWith('.pdf') && uploadFile.type !== 'application/pdf') {
+      setUploadNotice({ type: 'error', message: 'Only PDF files are accepted.' });
       showToast({ type: 'error', message: 'Only PDF files are accepted.' });
       return;
     }
     setUploading(true);
+    setActionError(null);
+    setUploadNotice({ type: 'info', message: 'Uploading document...' });
     try {
       const uploaded = (await uploadDocument(vehicleId, uploadFile)).data;
       setUploadFile(null);
@@ -296,27 +480,49 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
             ? 'Document uploaded and parsed. Review the extracted fields before approval.'
             : 'Document uploaded and is waiting for administrator review.',
         });
+        setUploadNotice({
+          type: 'success',
+          message: canReview
+            ? 'Document uploaded and parsed. Review the extracted fields before approval.'
+            : 'Document uploaded and is waiting for administrator review.',
+        });
         if (canReview) {
           setReviewState(reviewStateFor(uploaded, 'APPROVE'));
         }
       } else if (uploaded.status === 'PARSING_FAILED') {
-        const parserMessage = uploaded.extraction?.errorMessage ?? 'Automatic parsing failed.';
+        const parserMessage = parserFailureMessage(uploaded);
         showToast({
           type: 'error',
           message: `Document uploaded, but parser failed: ${parserMessage}`,
           durationMs: 7000,
         });
+        setUploadNotice({
+          type: 'error',
+          message: `Document uploaded, but parser failed: ${parserMessage}`,
+        });
         if (canReview) {
           setReviewState(reviewStateFor(uploaded, 'REJECT'));
         }
+      } else if (uploaded.status === 'PARSING') {
+        setTrackedUploadId(uploaded.id);
+        showToast({
+          type: 'info',
+          message: 'Document uploaded. Parsing is running in the background.',
+        });
+        setUploadNotice({
+          type: 'info',
+          message: 'Document uploaded. Parsing is running in the background.',
+        });
       } else {
         showToast({ type: 'success', message: 'Document uploaded successfully.' });
+        setUploadNotice({ type: 'success', message: 'Document uploaded successfully.' });
       }
 
       load();
     } catch (err: unknown) {
       // Toast is shown by the axios interceptor; do NOT logout — just surface the error.
       const msg = apiMessage(err, 'Upload failed. Please try again.');
+      setUploadNotice({ type: 'error', message: msg });
       showToast({ type: 'error', message: msg });
     } finally {
       setUploading(false);
@@ -408,8 +614,14 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
         </button>
       </form>
 
+      {uploadNotice && (
+        <div className={`doc-flow-notice doc-flow-notice-${uploadNotice.type}`} role="status">
+          {uploadNotice.message}
+        </div>
+      )}
+
       {actionError && (
-        <p className="error" style={{ marginBottom: '0.75rem' }}>{actionError}</p>
+        <p className="error doc-action-error">{actionError}</p>
       )}
 
       {loading && <p className="doc-empty">Loading documents…</p>}
@@ -447,10 +659,20 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
                 <ExtractionBadges extraction={doc.extraction} />
               )}
 
+              {doc.extraction?.parserStatus === 'PARSED' && (
+                <ParsedDocumentSummary extraction={doc.extraction} />
+              )}
+
+              {doc.status === 'PARSING' && (
+                <p className="doc-info-msg">
+                  Automatic parsing is running. This page updates automatically.
+                </p>
+              )}
+
               {/* Parser error */}
-              {doc.extraction?.parserStatus === 'FAILED' && (
-                <p className="badge badge-warning" style={{ marginTop: '0.25rem' }}>
-                  Parser error: {doc.extraction.errorMessage ?? 'unknown error'}
+              {(doc.status === 'PARSING_FAILED' || doc.extraction?.parserStatus === 'FAILED') && (
+                <p className="doc-error-msg">
+                  Automatic parsing failed: {parserFailureMessage(doc)}
                 </p>
               )}
 
@@ -477,7 +699,7 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
                       <span>Valid until: {doc.approvedData.validUntil}</span>
                     )}
                   </div>
-                  <details className="raw-parser" style={{ marginTop: '0.4rem' }}>
+                  <details className="raw-parser raw-parser-approved">
                     <summary>Full approved data</summary>
                     <pre>{JSON.stringify(doc.approvedData.approvedData, null, 2)}</pre>
                   </details>
@@ -514,7 +736,7 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
                         className="btn btn-success"
                         onClick={() => startReview(doc, 'APPROVE')}
                       >
-                        Approve
+                        Review
                       </button>
                     )}
                     <button

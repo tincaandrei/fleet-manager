@@ -1,0 +1,124 @@
+package com.fleet.document.service;
+
+import com.fleet.document.dto.MarkAllNotificationsReadResponse;
+import com.fleet.document.dto.NotificationResponse;
+import com.fleet.document.dto.UnreadNotificationCountResponse;
+import com.fleet.document.entity.NotificationType;
+import com.fleet.document.entity.UserNotification;
+import com.fleet.document.exception.ResourceNotFoundException;
+import com.fleet.document.repository.UserNotificationRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.UUID;
+
+@Service
+@RequiredArgsConstructor
+public class UserNotificationService {
+
+    private static final String PARSING_COMPLETED_TITLE = "Document parsing completed";
+    private static final String PARSING_COMPLETED_MESSAGE = "Your uploaded document has been processed and is ready for review.";
+    private static final String PARSING_FAILED_TITLE = "Document parsing failed";
+    private static final String PARSING_FAILED_MESSAGE = "We could not automatically process your document. Please review or reupload it.";
+
+    private final UserNotificationRepository notificationRepository;
+
+    @Transactional
+    public void notifyParsingCompleted(Long userId, UUID documentId) {
+        createDocumentNotification(
+                userId,
+                documentId,
+                NotificationType.DOCUMENT_PARSING_COMPLETED,
+                PARSING_COMPLETED_TITLE,
+                PARSING_COMPLETED_MESSAGE
+        );
+    }
+
+    @Transactional
+    public void notifyParsingFailed(Long userId, UUID documentId) {
+        createDocumentNotification(
+                userId,
+                documentId,
+                NotificationType.DOCUMENT_PARSING_FAILED,
+                PARSING_FAILED_TITLE,
+                PARSING_FAILED_MESSAGE
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<NotificationResponse> listForCurrentUser(Authentication authentication) {
+        Long userId = requireCurrentUserId(authentication);
+        return notificationRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public UnreadNotificationCountResponse unreadCount(Authentication authentication) {
+        Long userId = requireCurrentUserId(authentication);
+        return new UnreadNotificationCountResponse(notificationRepository.countByUserIdAndReadFalse(userId));
+    }
+
+    @Transactional
+    public NotificationResponse markRead(UUID id, Authentication authentication) {
+        Long userId = requireCurrentUserId(authentication);
+        UserNotification notification = notificationRepository.findByIdAndUserId(id, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Notification not found: " + id));
+        notification.setRead(true);
+        return toResponse(notificationRepository.save(notification));
+    }
+
+    @Transactional
+    public MarkAllNotificationsReadResponse markAllRead(Authentication authentication) {
+        Long userId = requireCurrentUserId(authentication);
+        List<UserNotification> unreadNotifications = notificationRepository.findByUserIdAndReadFalse(userId);
+        unreadNotifications.forEach(notification -> notification.setRead(true));
+        notificationRepository.saveAll(unreadNotifications);
+        return new MarkAllNotificationsReadResponse(unreadNotifications.size());
+    }
+
+    private void createDocumentNotification(
+            Long userId,
+            UUID documentId,
+            NotificationType type,
+            String title,
+            String message
+    ) {
+        if (userId == null) {
+            return;
+        }
+        notificationRepository.save(UserNotification.builder()
+                .userId(userId)
+                .documentId(documentId)
+                .type(type)
+                .title(title)
+                .message(message)
+                .read(false)
+                .build());
+    }
+
+    private Long requireCurrentUserId(Authentication authentication) {
+        Long userId = SecurityUtils.currentUserId(authentication);
+        if (userId == null) {
+            throw new AccessDeniedException("Access denied");
+        }
+        return userId;
+    }
+
+    private NotificationResponse toResponse(UserNotification notification) {
+        return new NotificationResponse(
+                notification.getId(),
+                notification.getUserId(),
+                notification.getDocumentId(),
+                notification.getType(),
+                notification.getTitle(),
+                notification.getMessage(),
+                notification.isRead(),
+                notification.getCreatedAt()
+        );
+    }
+}

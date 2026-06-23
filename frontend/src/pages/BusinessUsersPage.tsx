@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import Navbar from '../components/Navbar';
 import { listBusinessUsers, createBusinessUser, updateBusinessUserRole } from '../api/authApi';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/useAuth';
 import type { BusinessUser, CreateBusinessUserRequest } from '../types/auth';
+import PageShell from '../components/ui/PageShell';
+import DataState from '../components/ui/DataState';
+import ResponsiveTable from '../components/ui/ResponsiveTable';
 
 function apiMessage(err: unknown, fallback: string): string {
   const e = err as { response?: { data?: { message?: string } } };
@@ -195,7 +197,8 @@ export default function BusinessUsersPage() {
   };
 
   useEffect(() => {
-    load();
+    const timeoutId = window.setTimeout(() => load(), 0);
+    return () => window.clearTimeout(timeoutId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId]);
 
@@ -209,19 +212,14 @@ export default function BusinessUsersPage() {
 
   if (!canManage) {
     return (
-      <>
-        <Navbar />
-        <main className="page">
-          <p className="error">Access denied. You can only manage users in your own organization.</p>
-        </main>
-      </>
+      <PageShell>
+        <DataState type="error">Access denied. You can only manage users in your own organization.</DataState>
+      </PageShell>
     );
   }
 
   return (
-    <>
-      <Navbar />
-      <main className="page">
+    <PageShell>
         <div className="page-header">
           <h1>Organization Users</h1>
           {isSuperAdmin && (
@@ -231,15 +229,15 @@ export default function BusinessUsersPage() {
 
         <p className="info-note">Organization ID: {businessId}</p>
 
-        {loading && <p className="doc-empty">Loading users…</p>}
-        {!loading && error && <p className="error">{error}</p>}
+        {loading && <DataState type="loading">Loading users...</DataState>}
+        {!loading && error && <DataState type="error">{error}</DataState>}
 
         {!loading && !error && (
           <>
             {users.length === 0 ? (
-              <p className="doc-empty">No users in this organization yet.</p>
+              <DataState>No users in this organization yet.</DataState>
             ) : (
-              <table className="vehicles-table">
+              <ResponsiveTable ariaLabel="Organization users">
                 <thead>
                   <tr>
                     <th>ID</th>
@@ -267,13 +265,12 @@ export default function BusinessUsersPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </ResponsiveTable>
             )}
 
             <AddUserForm businessId={businessId} onCreated={handleCreated} />
           </>
         )}
-      </main>
-    </>
+    </PageShell>
   );
 }

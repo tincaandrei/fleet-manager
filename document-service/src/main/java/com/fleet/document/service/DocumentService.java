@@ -23,8 +23,9 @@ import com.fleet.document.exception.ResourceNotFoundException;
 import com.fleet.document.repository.ApprovedDocumentDataRepository;
 import com.fleet.document.repository.DocumentExtractionDraftRepository;
 import com.fleet.document.repository.VehicleDocumentRepository;
+import com.fleet.document.service.event.DocumentUploadedForParsingEvent;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.Resource;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
@@ -33,7 +34,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
@@ -46,7 +46,6 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class DocumentService {
 
     private final VehicleDocumentRepository documentRepository;
@@ -54,8 +53,9 @@ public class DocumentService {
     private final ApprovedDocumentDataRepository approvedDataRepository;
     private final DocumentStorageService storageService;
     private final FleetVehicleClient fleetVehicleClient;
-    private final DocumentParsingService documentParsingService;
+    private final DocumentParserResultService parserResultService;
     private final VehicleDocumentAttributeService vehicleDocumentAttributeService;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final Set<DocumentStatus> REJECTABLE_STATUSES = EnumSet.of(
             DocumentStatus.NEEDS_REVIEW,
@@ -97,33 +97,8 @@ public class DocumentService {
                 .uploadedByUserId(SecurityUtils.currentUserId(authentication))
                 .build();
         VehicleDocument savedDocument = documentRepository.save(document);
-        ParserResultRequest parserResult = requestParserExtraction(savedDocument);
-        if (parserResult != null) {
-            applyParserResult(savedDocument, parserResult);
-            savedDocument = documentRepository.save(savedDocument);
-        }
+        eventPublisher.publishEvent(new DocumentUploadedForParsingEvent(savedDocument.getId()));
         return toResponse(savedDocument, SecurityUtils.canReview(authentication));
-    }
-
-    private ParserResultRequest requestParserExtraction(VehicleDocument document) {
-        try {
-            return documentParsingService.parse(document);
-        } catch (RuntimeException ex) {
-            log.warn("Document parser request failed for document {}", document.getId(), ex);
-            return new ParserResultRequest(
-                    document.getId(),
-                    ParserStatus.FAILED,
-                    null,
-                    null,
-                    null,
-                    "document-service-ollama-parser",
-                    null,
-                    null,
-                    List.of("Automatic parsing failed. The document can be reviewed manually."),
-                    "PARSER_REQUEST_FAILED",
-                    "Could not parse document"
-            );
-        }
     }
 
     @Transactional
@@ -137,7 +112,7 @@ public class DocumentService {
             throw new IllegalArgumentException("Parser results can only be received for PARSING documents");
         }
 
-        applyParserResult(document, request);
+        parserResultService.applyParserResult(document, request);
 
         return toResponse(documentRepository.save(document), SecurityUtils.canReview(authentication));
     }
@@ -474,39 +449,6 @@ public class DocumentService {
         return vehicle;
     }
 
-    private void applyParserResult(VehicleDocument document, ParserResultRequest request) {
-        DocumentExtractionDraft draft = extractionDraftRepository.findByDocument(document)
-                .orElseGet(() -> DocumentExtractionDraft.builder().document(document).build());
-        applyParserMetadata(draft, request);
-
-        if (request.parserStatus() == ParserStatus.PARSED && parserResultIsValid(request)) {
-            document.setDocumentType(toDocumentType(request.detectedDocumentType()));
-            document.setDocumentSubtype(normalizeText(request.detectedSubtype()));
-            draft.setParserStatus(ParserStatus.PARSED);
-            extractionDraftRepository.save(draft);
-            document.setStatus(DocumentStatus.NEEDS_REVIEW);
-        } else {
-            draft.setParserStatus(request.parserStatus() == null ? ParserStatus.FAILED : request.parserStatus());
-            if (draft.getParserStatus() == ParserStatus.PARSED) {
-                draft.setErrorCode("INVALID_PARSER_RESULT");
-                draft.setErrorMessage("Parsed result must include extracted data and confidence between 0 and 1 when present");
-            }
-            extractionDraftRepository.save(draft);
-            document.setStatus(DocumentStatus.PARSING_FAILED);
-        }
-    }
-
-    private DocumentType toDocumentType(String value) {
-        if (value == null || value.isBlank()) {
-            return DocumentType.OTHER;
-        }
-        try {
-            return DocumentType.valueOf(value.trim().toUpperCase());
-        } catch (IllegalArgumentException ignored) {
-            return DocumentType.OTHER;
-        }
-    }
-
     private void assertCanReadDocument(VehicleDocument document, Authentication authentication) {
         if (SecurityUtils.isSuperadmin(authentication)) {
             return;
@@ -534,28 +476,6 @@ public class DocumentService {
             return;
         }
         throw new AccessDeniedException("Access denied");
-    }
-
-    private void applyParserMetadata(DocumentExtractionDraft draft, ParserResultRequest request) {
-        draft.setDetectedDocumentType(normalizeText(request.detectedDocumentType()));
-        draft.setDetectedSubtype(normalizeText(request.detectedSubtype()));
-        draft.setConfidence(request.confidence());
-        draft.setExtractedData(request.extractedData());
-        draft.setWarnings(request.warnings());
-        draft.setParserName(normalizeText(request.parserName()));
-        draft.setParserVersion(normalizeText(request.parserVersion()));
-        draft.setParserStatus(request.parserStatus());
-        draft.setErrorCode(normalizeText(request.errorCode()));
-        draft.setErrorMessage(normalizeText(request.errorMessage()));
-    }
-
-    private boolean parserResultIsValid(ParserResultRequest request) {
-        return !CollectionUtils.isEmpty(request.extractedData()) && confidenceIsValid(request.confidence());
-    }
-
-    private boolean confidenceIsValid(BigDecimal confidence) {
-        return confidence == null
-                || (confidence.compareTo(BigDecimal.ZERO) >= 0 && confidence.compareTo(BigDecimal.ONE) <= 0);
     }
 
     private void requireReviewer(Authentication authentication) {

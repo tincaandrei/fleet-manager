@@ -45,8 +45,10 @@ export default function ToastProvider({ children }: { children: ReactNode }) {
   }, [removeToast]);
 
   useEffect(() => {
-    const queuedToast = consumeQueuedToast();
-    if (queuedToast) addToast(queuedToast);
+    const queuedToastId = window.setTimeout(() => {
+      const queuedToast = consumeQueuedToast();
+      if (queuedToast) addToast(queuedToast);
+    }, 0);
 
     const handleToast = (event: WindowEventMap[typeof TOAST_EVENT]) => {
       addToast(event.detail);
@@ -55,6 +57,7 @@ export default function ToastProvider({ children }: { children: ReactNode }) {
     window.addEventListener(TOAST_EVENT, handleToast);
 
     return () => {
+      window.clearTimeout(queuedToastId);
       window.removeEventListener(TOAST_EVENT, handleToast);
       Object.values(timersRef.current).forEach((timer) => window.clearTimeout(timer));
       timersRef.current = {};

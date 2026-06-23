@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import Navbar from '../components/Navbar';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/useAuth';
 import { listVehicleAlerts } from '../api/documentApi';
 import { computeComplianceStatus, daysUntil } from '../types/document';
 import type { VehicleAlertGroup, VehicleDocumentAttributeResponse, ComplianceStatus } from '../types/document';
+import PageShell from '../components/ui/PageShell';
+import DataState from '../components/ui/DataState';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -136,14 +137,13 @@ export default function DocumentAlertsPage() {
   };
 
   useEffect(() => {
-    load();
+    const timeoutId = window.setTimeout(() => load(), 0);
+    return () => window.clearTimeout(timeoutId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [days, includeExpired, isAdmin]);
 
   return (
-    <>
-      <Navbar />
-      <main className="page">
+    <PageShell>
         <div className="page-header">
           <h1>Document Alerts</h1>
           <Link to="/vehicles">← Vehicles</Link>
@@ -171,13 +171,13 @@ export default function DocumentAlertsPage() {
         </div>
 
         {/* ── Status line ── */}
-        {loading && <p className="doc-empty">Loading alerts…</p>}
-        {!loading && error && <p className="error">{error}</p>}
+        {loading && <DataState type="loading">Loading alerts...</DataState>}
+        {!loading && error && <DataState type="error">{error}</DataState>}
         {!loading && !error && groups.length === 0 && (
-          <p className="doc-empty">
+          <DataState>
             No document alerts within {days} days
             {includeExpired ? ' (including already expired)' : ''}.
-          </p>
+          </DataState>
         )}
 
         {!loading && !error && groups.length > 0 && (
@@ -195,7 +195,6 @@ export default function DocumentAlertsPage() {
             </div>
           </>
         )}
-      </main>
-    </>
+    </PageShell>
   );
 }

@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { getVehicle, deleteVehicle } from '../api/vehicleApi';
+import { Link, useParams, useNavigate } from 'react-router-dom';
+import { deleteVehicle, getVehicle } from '../api/vehicleApi';
 import type { Vehicle } from '../types/vehicle';
-import Navbar from '../components/Navbar';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/useAuth';
 import VehicleDocumentsSection from '../components/VehicleDocumentsSection';
 import ComplianceSection from '../components/ComplianceSection';
+import PageShell from '../components/ui/PageShell';
+import DataState from '../components/ui/DataState';
+import StatusBadge from '../components/ui/StatusBadge';
+import { getApiErrorMessage } from '../utils/apiError';
 
 type Tab = 'details' | 'documents' | 'compliance';
 
@@ -14,16 +17,21 @@ export default function VehicleDetailsPage() {
   const { isAdmin } = useAuth();
   const navigate = useNavigate();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('details');
 
   useEffect(() => {
-    getVehicle(Number(id))
-      .then((res) => setVehicle(res.data))
-      .catch((err: unknown) => {
-        const e = err as { response?: { status?: number; data?: { message?: string } } };
-        setError(e.response?.data?.message ?? 'Failed to load vehicle.');
-      });
+    const timeoutId = window.setTimeout(() => {
+      setLoading(true);
+      setError(null);
+      getVehicle(Number(id))
+        .then((res) => setVehicle(res.data))
+        .catch((err: unknown) => setError(getApiErrorMessage(err, 'Failed to load vehicle.')))
+        .finally(() => setLoading(false));
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [id]);
 
   const handleDelete = async () => {
@@ -32,15 +40,12 @@ export default function VehicleDetailsPage() {
       await deleteVehicle(Number(id));
       navigate('/vehicles');
     } catch (err: unknown) {
-      const e = err as { response?: { status?: number; data?: { message?: string } } };
-      setError(e.response?.data?.message ?? 'Failed to delete vehicle.');
+      setError(getApiErrorMessage(err, 'Failed to delete vehicle.'));
     }
   };
 
   return (
-    <>
-      <Navbar />
-      <main className="page">
+    <PageShell>
         <div className="page-header">
           <h1>Vehicle Details</h1>
           <div className="actions-row">
@@ -56,9 +61,28 @@ export default function VehicleDetailsPage() {
           </div>
         </div>
 
-        {error && <p className="error">{error}</p>}
+        {loading && <DataState type="loading">Loading vehicle...</DataState>}
+        {error && <DataState type="error">{error}</DataState>}
         {vehicle && (
           <>
+            <section className="detail-summary" aria-label="Vehicle summary">
+              <div className="detail-hero">
+                <h2>{vehicle.brand} {vehicle.model}</h2>
+                <StatusBadge status={vehicle.status} />
+                <div className="detail-meta">
+                  <span className="meta-chip">{vehicle.vehicleType}</span>
+                  <span className="meta-chip">{vehicle.fuelType}</span>
+                  <span className="meta-chip">{vehicle.ownershipType}</span>
+                  <span className="meta-chip">{vehicle.currentMileage.toLocaleString()} km</span>
+                </div>
+              </div>
+              <aside className="detail-aside">
+                <div className="detail-aside-row"><span>Department</span><strong>{vehicle.department || '-'}</strong></div>
+                <div className="detail-aside-row"><span>Driver</span><strong>{vehicle.assignedDriverName || '-'}</strong></div>
+                <div className="detail-aside-row"><span>Organization</span><strong>{vehicle.businessId ?? '-'}</strong></div>
+              </aside>
+            </section>
+
             <nav className="vehicle-tabs">
               <button
                 className={`vehicle-tab${activeTab === 'details' ? ' vehicle-tab--active' : ''}`}
@@ -92,7 +116,7 @@ export default function VehicleDetailsPage() {
                   <tr><th>Type</th><td>{vehicle.vehicleType}</td></tr>
                   <tr><th>Fuel</th><td>{vehicle.fuelType}</td></tr>
                   <tr><th>Ownership</th><td>{vehicle.ownershipType}</td></tr>
-                  <tr><th>Status</th><td><span className={`status-badge status-${vehicle.status}`}>{vehicle.status}</span></td></tr>
+                  <tr><th>Status</th><td><StatusBadge status={vehicle.status} /></td></tr>
                   <tr><th>Department</th><td>{vehicle.department}</td></tr>
                   <tr><th>Assigned Driver</th><td>{vehicle.assignedDriverName || '—'}</td></tr>
                   <tr><th>Assigned User ID</th><td>{vehicle.assignedUserId ?? '—'}</td></tr>
@@ -115,7 +139,6 @@ export default function VehicleDetailsPage() {
             )}
           </>
         )}
-      </main>
-    </>
+    </PageShell>
   );
 }

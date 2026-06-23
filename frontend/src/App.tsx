@@ -14,7 +14,7 @@ import BusinessCreateEditPage from './pages/BusinessCreateEditPage';
 import BusinessUsersPage from './pages/BusinessUsersPage';
 import PendingOrganizationPage from './pages/PendingOrganizationPage';
 import ToastProvider from './components/ToastProvider';
-import { useAuth } from './auth/AuthContext';
+import { useAuth } from './auth/useAuth';
 import { homeForRole } from './auth/roleHome';
 
 function RoleHomeRedirect() {

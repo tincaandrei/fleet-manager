@@ -40,6 +40,7 @@ import java.util.regex.Pattern;
 public class DocumentParsingService {
 
     private static final Pattern VIN_PATTERN = Pattern.compile("^[A-HJ-NPR-Z0-9]{17}$");
+    private static final Pattern ROMANIAN_LICENSE_PLATE_PATTERN = Pattern.compile("^(?:B\\d{2,3}[A-Z]{3}|[A-Z]{2}\\d{2,3}[A-Z]{3})$");
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
 
@@ -154,8 +155,6 @@ public class DocumentParsingService {
                 throw new ParserException("OLLAMA_INVALID_RESPONSE", "Ollama returned an empty response");
             }
             return parseJsonContent(response.message().content());
-        } catch (ParserException exception) {
-            throw exception;
         } catch (ResourceAccessException exception) {
             if (isTimeout(exception)) {
                 throw new ParserException("OLLAMA_TIMEOUT", "Ollama request timed out", exception);
@@ -180,19 +179,21 @@ public class DocumentParsingService {
         }
     }
 
-    private DocumentTypeDetection detect(String text) {
+    DocumentTypeDetection detect(String text) {
         String normalized = normalizeForDetection(text);
-        if (containsAny(normalized, "factura", "bon fiscal", "invoice", "receipt", "tva", "cui")) {
-            return new DocumentTypeDetection(DocumentType.EXPENSE_INVOICE, "UNKNOWN");
-        }
-        if (containsAny(normalized, "rovigneta", "rovinieta", "tarif de utilizare", "categoria vehiculului")) {
+        if (containsAny(normalized, "rovigneta", "rovinieta", "roviniete", "erovinieta", "tarif de utilizare", "cnadnr")) {
             return new DocumentTypeDetection(DocumentType.ROAD_TAX, "ROVINIETA");
         }
-        if (containsAny(normalized, "inspectie tehnica periodica", "itp", "rar", "valabilitate inspectie")) {
-            return new DocumentTypeDetection(DocumentType.TECHNICAL_INSPECTION, "ITP");
-        }
-        if (containsAny(normalized, "asigurare", "polita", "rca", "carte verde", "bonus malus")) {
+        if (containsAny(normalized, "asigurare", "asigurari", "asigurator", "polita", "carte verde", "bonus malus", "raspundere civila auto")
+                || containsAnyToken(normalized, "rca")) {
             return new DocumentTypeDetection(DocumentType.INSURANCE, "RCA");
+        }
+        if (containsAny(normalized, "factura", "bon fiscal", "invoice", "receipt", "tva")) {
+            return new DocumentTypeDetection(DocumentType.EXPENSE_INVOICE, "UNKNOWN");
+        }
+        if (containsAny(normalized, "inspectie tehnica periodica", "valabilitate inspectie")
+                || containsAnyToken(normalized, "itp", "rar")) {
+            return new DocumentTypeDetection(DocumentType.TECHNICAL_INSPECTION, "ITP");
         }
         return new DocumentTypeDetection(DocumentType.OTHER, "UNKNOWN");
     }
@@ -222,8 +223,19 @@ public class DocumentParsingService {
                     "category", "string|null",
                     "validFrom", "yyyy-MM-dd|null",
                     "validUntil", "yyyy-MM-dd|null",
-                    "issuer", "string|null"
-            ), true);
+                    "issuer", "string|null",
+                    "transactionId", "string|null",
+                    "amount", "number|null",
+                    "currency", "RON|EUR|USD|null"
+            ), true, """
+                    Rovinieta-specific rules:
+                    - This is a Romanian road tax document, even if the text also contains factura, invoice, TVA, or total.
+                    - Extract the vehicle registration plate only from labels such as numar inmatriculare, nr. inmatriculare, vehicul, or registration number.
+                    - A Romanian license plate looks like B123ABC, B12ABC, CJ12ABC, CJ123ABC. Do not use transaction ids, invoice ids, serial numbers, CNADNR ids, CUI, CIF, or order numbers as licensePlate.
+                    - Values starting with CNADNR are transaction or issuer references, not vehicle registration plates.
+                    - If no clear registration plate is present, return licensePlate as null.
+                    - Put transaction/order/reference identifiers in transactionId when present.
+                    """);
             case EXPENSE_INVOICE -> strategy(detection, List.of("invoiceNumber", "supplierName", "invoiceDate", "totalAmount", "currency", "expenseCategory"), Map.ofEntries(
                     Map.entry("invoiceNumber", "string|null"),
                     Map.entry("supplierName", "string|null"),
@@ -254,10 +266,20 @@ public class DocumentParsingService {
             Map<String, String> schemaFields,
             boolean requiresVehicleIdentifier
     ) {
+        return strategy(detection, importantFields, schemaFields, requiresVehicleIdentifier, "");
+    }
+
+    private ExtractionStrategy strategy(
+            DocumentTypeDetection detection,
+            List<String> importantFields,
+            Map<String, String> schemaFields,
+            boolean requiresVehicleIdentifier,
+            String extractionRules
+    ) {
         ObjectNode schema = objectMapper.createObjectNode();
         schemaFields.forEach(schema::put);
         schema.put("llmConfidence", "number|null");
-        return new ExtractionStrategy(detection.documentType(), detection.subtype(), importantFields, schema, requiresVehicleIdentifier);
+        return new ExtractionStrategy(detection.documentType(), detection.subtype(), importantFields, schema, requiresVehicleIdentifier, extractionRules);
     }
 
     private NormalizedExtraction normalizeAndValidate(ExtractionStrategy strategy, JsonNode rawData) {
@@ -268,6 +290,7 @@ public class DocumentParsingService {
         }
         normalized.remove("llmConfidence");
         normalizeUpperNoSpaces(normalized, "licensePlate");
+        removeMalformedLicensePlate(normalized);
         normalizeUpperNoSpaces(normalized, "vin");
         normalizeExpenseCategory(normalized);
         for (String field : List.of("validFrom", "validUntil", "inspectionDate", "invoiceDate", "issueDate")) {
@@ -290,6 +313,10 @@ public class DocumentParsingService {
         }
         if (hasValue(extractedData, "vin") && !VIN_PATTERN.matcher(extractedData.path("vin").asText()).matches()) {
             warnings.add("VIN appears malformed");
+        }
+        if (hasValue(extractedData, "licensePlate")
+                && !ROMANIAN_LICENSE_PLATE_PATTERN.matcher(extractedData.path("licensePlate").asText()).matches()) {
+            warnings.add("License plate appears malformed");
         }
         if (strategy.requiresVehicleIdentifier() && !hasValue(extractedData, "licensePlate") && !hasValue(extractedData, "vin")) {
             warnings.add("Missing both licensePlate and vin");
@@ -382,6 +409,15 @@ public class DocumentParsingService {
         return false;
     }
 
+    private boolean containsAnyToken(String value, String... tokens) {
+        for (String token : tokens) {
+            if (Pattern.compile("(?<![a-z0-9])" + Pattern.quote(token) + "(?![a-z0-9])").matcher(value).find()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean hasValue(JsonNode data, String field) {
         if (data == null || data.isNull()) {
             return false;
@@ -398,6 +434,16 @@ public class DocumentParsingService {
             if (!normalized.isBlank()) {
                 node.put(field, normalized);
             }
+        }
+    }
+
+    private void removeMalformedLicensePlate(ObjectNode node) {
+        if (!node.hasNonNull("licensePlate") || !node.get("licensePlate").isTextual()) {
+            return;
+        }
+        String value = node.get("licensePlate").asText();
+        if (!ROMANIAN_LICENSE_PLATE_PATTERN.matcher(value).matches()) {
+            node.putNull("licensePlate");
         }
     }
 
@@ -423,6 +469,10 @@ public class DocumentParsingService {
         String value = node.get(field).asText().trim();
         if (isIsoDate(value)) {
             node.put(field, value);
+            return;
+        }
+        if (value.length() >= 10 && isIsoDate(value.substring(0, 10))) {
+            node.put(field, value.substring(0, 10));
         }
     }
 
@@ -477,7 +527,7 @@ public class DocumentParsingService {
     private record TextExtractionResult(String text, double textQualityScore) {
     }
 
-    private record DocumentTypeDetection(DocumentType documentType, String subtype) {
+    record DocumentTypeDetection(DocumentType documentType, String subtype) {
     }
 
     private record NormalizedExtraction(JsonNode extractedData, List<String> warnings, double llmConfidence) {
@@ -488,7 +538,8 @@ public class DocumentParsingService {
             String subtype,
             List<String> importantFields,
             ObjectNode expectedSchema,
-            boolean requiresVehicleIdentifier
+            boolean requiresVehicleIdentifier,
+            String extractionRules
     ) {
         private String buildPrompt(String extractedText) {
             return """
@@ -505,9 +556,12 @@ public class DocumentParsingService {
                     Expected JSON schema:
                     %s
 
+                    Extraction rules:
+                    %s
+
                     Document text:
                     %s
-                    """.formatted(documentType, subtype, expectedSchema.toPrettyString(), limitText(extractedText));
+                    """.formatted(documentType, subtype, expectedSchema.toPrettyString(), extractionRules, limitText(extractedText));
         }
 
         private String limitText(String text) {
