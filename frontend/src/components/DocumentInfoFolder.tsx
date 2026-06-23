@@ -34,15 +34,19 @@ export default function DocumentInfoFolderPanel({ documentId, onClose }: Props) 
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    setError(null);
-    getDocumentInfoFolder(documentId)
-      .then((res) => setFolder(res.data))
-      .catch((err: unknown) => {
-        const e = err as { response?: { data?: { message?: string } } };
-        setError(e?.response?.data?.message ?? 'Failed to load info folder.');
-      })
-      .finally(() => setLoading(false));
+    const timeoutId = window.setTimeout(() => {
+      setLoading(true);
+      setError(null);
+      getDocumentInfoFolder(documentId)
+        .then((res) => setFolder(res.data))
+        .catch((err: unknown) => {
+          const e = err as { response?: { data?: { message?: string } } };
+          setError(e?.response?.data?.message ?? 'Failed to load info folder.');
+        })
+        .finally(() => setLoading(false));
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [documentId]);
 
   return (

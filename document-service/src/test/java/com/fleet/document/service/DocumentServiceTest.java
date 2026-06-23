@@ -13,8 +13,10 @@ import com.fleet.document.entity.VehicleDocument;
 import com.fleet.document.repository.ApprovedDocumentDataRepository;
 import com.fleet.document.repository.DocumentExtractionDraftRepository;
 import com.fleet.document.repository.VehicleDocumentRepository;
+import com.fleet.document.service.event.DocumentUploadedForParsingEvent;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.context.ApplicationEventPublisher;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -31,6 +33,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -53,10 +57,13 @@ class DocumentServiceTest {
     private FleetVehicleClient fleetVehicleClient;
 
     @Mock
-    private DocumentParsingService documentParsingService;
+    private DocumentParserResultService parserResultService;
 
     @Mock
     private VehicleDocumentAttributeService vehicleDocumentAttributeService;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @Mock
     private MultipartFile multipartFile;
@@ -96,7 +103,12 @@ class DocumentServiceTest {
         verify(documentRepository).save(captor.capture());
         assertThat(captor.getValue().getStatus()).isEqualTo(DocumentStatus.PARSING);
         assertThat(captor.getValue().getVehicleId()).isEqualTo(1L);
-        verify(documentParsingService).parse(captor.getValue());
+        assertThat(captor.getValue().getUploadedByUserId()).isEqualTo(10L);
+
+        ArgumentCaptor<DocumentUploadedForParsingEvent> eventCaptor = ArgumentCaptor.forClass(DocumentUploadedForParsingEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue().documentId()).isEqualTo(captor.getValue().getId());
+        verifyNoInteractions(parserResultService);
     }
 
     @Test
@@ -117,10 +129,14 @@ class DocumentServiceTest {
         UUID documentId = UUID.randomUUID();
         VehicleDocument document = document(documentId, DocumentStatus.PARSING);
         when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
-        when(extractionDraftRepository.findByDocument(document)).thenReturn(Optional.empty());
-        when(extractionDraftRepository.save(any(DocumentExtractionDraft.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doAnswer(invocation -> {
+            VehicleDocument parsedDocument = invocation.getArgument(0);
+            parsedDocument.setStatus(DocumentStatus.NEEDS_REVIEW);
+            return null;
+        }).when(parserResultService).applyParserResult(any(VehicleDocument.class), any(ParserResultRequest.class));
         when(documentRepository.save(any(VehicleDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(approvedDataRepository.findByDocument(any())).thenReturn(Optional.empty());
+        when(extractionDraftRepository.findByDocument(any())).thenReturn(Optional.empty());
 
         documentService.receiveParserResult(documentId, new ParserResultRequest(
                 documentId,
@@ -136,9 +152,7 @@ class DocumentServiceTest {
                 null
         ), staffAuth);
 
-        ArgumentCaptor<DocumentExtractionDraft> draftCaptor = ArgumentCaptor.forClass(DocumentExtractionDraft.class);
-        verify(extractionDraftRepository).save(draftCaptor.capture());
-        assertThat(draftCaptor.getValue().getParserStatus()).isEqualTo(ParserStatus.PARSED);
+        verify(parserResultService).applyParserResult(any(VehicleDocument.class), any(ParserResultRequest.class));
         assertThat(document.getStatus()).isEqualTo(DocumentStatus.NEEDS_REVIEW);
     }
 
@@ -147,10 +161,14 @@ class DocumentServiceTest {
         UUID documentId = UUID.randomUUID();
         VehicleDocument document = document(documentId, DocumentStatus.PARSING);
         when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
-        when(extractionDraftRepository.findByDocument(document)).thenReturn(Optional.empty());
-        when(extractionDraftRepository.save(any(DocumentExtractionDraft.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doAnswer(invocation -> {
+            VehicleDocument failedDocument = invocation.getArgument(0);
+            failedDocument.setStatus(DocumentStatus.PARSING_FAILED);
+            return null;
+        }).when(parserResultService).applyParserResult(any(VehicleDocument.class), any(ParserResultRequest.class));
         when(documentRepository.save(any(VehicleDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(approvedDataRepository.findByDocument(any())).thenReturn(Optional.empty());
+        when(extractionDraftRepository.findByDocument(any())).thenReturn(Optional.empty());
 
         documentService.receiveParserResult(documentId, new ParserResultRequest(
                 documentId,

@@ -1,8 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { getMe, updateMe } from '../api/authApi';
 import type { UserProfile } from '../types/auth';
-import Navbar from '../components/Navbar';
 import { showToast } from '../utils/toast';
+import { getApiErrorMessage } from '../utils/apiError';
+import PageShell from '../components/ui/PageShell';
+import PageHeader from '../components/ui/PageHeader';
+import { Button } from '../components/ui/Button';
+import DataState from '../components/ui/DataState';
 
 interface ProfileForm {
   email: string;
@@ -88,28 +92,22 @@ export default function ProfilePage() {
       setIsEditOpen(false);
       setSuccess('Profile updated.');
       showToast({ type: 'success', message: 'Profile updated.' });
-    } catch (err: any) {
-      const message = err.response?.data?.message ?? 'Failed to update profile.';
-      setError(message);
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Failed to update profile.'));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <>
-      <Navbar />
-      <main className="page">
-        <div className="profile-header">
-          <h1>My Profile</h1>
-          {profile && (
-            <button type="button" className="btn" onClick={openEdit}>
-              Edit
-            </button>
-          )}
-        </div>
-        {error && !isEditOpen && <p className="error">{error}</p>}
-        {success && <p className="success-note">{success}</p>}
+    <PageShell>
+        <PageHeader
+          title="My Profile"
+          description="View your account and organization assignment."
+          actions={profile && <Button onClick={openEdit}>Edit</Button>}
+        />
+        {error && !isEditOpen && <DataState type="error">{error}</DataState>}
+        {success && <DataState type="success">{success}</DataState>}
         {profile && (
           <div className="profile-layout">
             <table className="detail-table">
@@ -179,7 +177,6 @@ export default function ProfilePage() {
             )}
           </div>
         )}
-      </main>
-    </>
+    </PageShell>
   );
 }

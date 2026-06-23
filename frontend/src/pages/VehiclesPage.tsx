@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getVehicles, deleteVehicle } from '../api/vehicleApi';
+import { deleteVehicle, getVehicles } from '../api/vehicleApi';
 import type { Vehicle, VehicleFilters } from '../types/vehicle';
-import Navbar from '../components/Navbar';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/useAuth';
+import PageShell from '../components/ui/PageShell';
+import PageHeader from '../components/ui/PageHeader';
+import { Button, ButtonLink } from '../components/ui/Button';
+import DataState from '../components/ui/DataState';
+import ResponsiveTable from '../components/ui/ResponsiveTable';
+import StatusBadge from '../components/ui/StatusBadge';
+import { getApiErrorMessage } from '../utils/apiError';
 
 const STATUSES   = ['ACTIVE', 'IN_SERVICE', 'INACTIVE', 'SOLD', 'DECOMMISSIONED'];
 const TYPES      = ['CAR', 'VAN', 'TRUCK', 'MOTORCYCLE', 'OTHER'];
@@ -14,6 +20,7 @@ export default function VehiclesPage() {
   const { isAdmin, isSuperAdmin, role, businessId } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [filters, setFilters]   = useState<VehicleFilters>({});
+  const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
 
   /**
@@ -23,17 +30,17 @@ export default function VehiclesPage() {
    * - SUPERADMIN: no default scope, but may manually filter by businessId
    */
   const load = (f: VehicleFilters = filters) => {
+    setLoading(true);
     setError(null);
     getVehicles(f)
       .then((res) => setVehicles(res.data))
-      .catch((err: unknown) => {
-        const e = err as { response?: { data?: { message?: string } } };
-        setError(e.response?.data?.message ?? 'Failed to load vehicles.');
-      });
+      .catch((err: unknown) => setError(getApiErrorMessage(err, 'Failed to load vehicles.')))
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    load({});
+    const timeoutId = window.setTimeout(() => load({}), 0);
+    return () => window.clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -53,28 +60,47 @@ export default function VehiclesPage() {
       await deleteVehicle(id);
       setVehicles((prev) => prev.filter((v) => v.id !== id));
     } catch (err: unknown) {
-      const e = err as { response?: { status?: number; data?: { message?: string } } };
-      setError(e.response?.data?.message ?? 'Failed to delete vehicle.');
+      setError(getApiErrorMessage(err, 'Failed to delete vehicle.'));
     }
   };
 
+  const activeCount = vehicles.filter((vehicle) => vehicle.status === 'ACTIVE').length;
+  const serviceCount = vehicles.filter((vehicle) => vehicle.status === 'IN_SERVICE').length;
+  const inactiveCount = vehicles.filter((vehicle) => vehicle.status === 'INACTIVE').length;
+
   return (
-    <>
-      <Navbar />
-      <main className="page">
-        <div className="page-header">
-          <h1>
-            {role === 'EMPLOYEE' ? 'My Vehicles' : 'Fleet'}
-          </h1>
-          {isAdmin && (
-            <Link to="/vehicles/new" className="btn">
-              ＋ New Vehicle
-            </Link>
-          )}
+    <PageShell>
+      <PageHeader
+        title={role === 'EMPLOYEE' ? 'My Vehicles' : 'Fleet'}
+        description={
+          role === 'EMPLOYEE'
+            ? 'Vehicles assigned to your account.'
+            : 'Search, filter, and manage fleet vehicles.'
+        }
+        actions={isAdmin && <ButtonLink to="/vehicles/new">+ New Vehicle</ButtonLink>}
+      />
+
+      <section className="vehicle-metrics" aria-label="Fleet summary">
+        <div className="metric-card">
+          <span className="metric-label">Total</span>
+          <span className="metric-value">{vehicles.length}</span>
         </div>
+        <div className="metric-card">
+          <span className="metric-label">Active</span>
+          <span className="metric-value">{activeCount}</span>
+        </div>
+        <div className="metric-card">
+          <span className="metric-label">In service</span>
+          <span className="metric-value">{serviceCount}</span>
+        </div>
+        <div className="metric-card">
+          <span className="metric-label">Inactive</span>
+          <span className="metric-value">{inactiveCount}</span>
+        </div>
+      </section>
 
         {/* ── Filters ── */}
-        <form onSubmit={handleFilter} className="filters">
+      <form onSubmit={handleFilter} className="filters filters-modern">
           <input
             placeholder="License plate"
             value={filters.licensePlate ?? ''}
@@ -117,32 +143,34 @@ export default function VehiclesPage() {
             />
           )}
 
-          <button type="submit">Filter</button>
-          <button
-            type="button"
+          <Button type="submit">Filter</Button>
+          <Button
+            variant="secondary"
             onClick={() => {
               setFilters({});
               load({});
             }}
           >
             Clear
-          </button>
+          </Button>
         </form>
 
         {/* Contextual note for EMPLOYEE */}
         {role === 'EMPLOYEE' && (
-          <p className="info-note">Showing only vehicles assigned to your account.</p>
+          <DataState type="info">Showing only vehicles assigned to your account.</DataState>
         )}
 
         {/* Contextual note for BUSINESS_ADMIN */}
         {role === 'BUSINESS_ADMIN' && businessId != null && (
-          <p className="info-note">Showing all vehicles in your organization (ID {businessId}).</p>
+          <DataState type="info">Showing all vehicles in your organization (ID {businessId}).</DataState>
         )}
 
-        {error && <p className="error">{error}</p>}
+        {error && <DataState type="error">{error}</DataState>}
+        {loading && <DataState type="loading">Loading vehicles...</DataState>}
 
         {/* ── Table (desktop) / Card list (mobile via CSS + data-label) ── */}
-        <table className="vehicles-table">
+        {!loading && !error && (
+        <ResponsiveTable ariaLabel="Vehicles">
           <thead>
             <tr>
               <th>License Plate</th>
@@ -163,26 +191,35 @@ export default function VehiclesPage() {
             )}
             {vehicles.map((v) => (
               <tr key={v.id}>
-                <td data-label="License Plate">{v.licensePlate}</td>
-                <td data-label="Brand / Model">{v.brand} {v.model}</td>
+                <td data-label="License Plate">
+                  <div className="vehicle-identity">
+                    <Link to={`/vehicles/${v.id}`} className="vehicle-title-link">{v.licensePlate}</Link>
+                    <span className="vehicle-subtext">VIN {v.vin}</span>
+                  </div>
+                </td>
+                <td data-label="Brand / Model">
+                  <div className="vehicle-identity">
+                    <span>{v.brand} {v.model}</span>
+                    <span className="vehicle-subtext">{v.currentMileage.toLocaleString()} km</span>
+                  </div>
+                </td>
                 <td data-label="Type">{v.vehicleType}</td>
                 <td data-label="Fuel">{v.fuelType}</td>
                 <td data-label="Status">
-                  <span className={`status-badge status-${v.status}`}>{v.status}</span>
+                  <StatusBadge status={v.status} />
                 </td>
                 <td data-label="Department">{v.department}</td>
                 {isSuperAdmin && (
                   <td data-label="Organization">{v.businessId ?? '-'}</td>
                 )}
                 <td data-label="Actions" className="actions-cell">
-                  <Link to={`/vehicles/${v.id}`}>View</Link>
+                  <ButtonLink to={`/vehicles/${v.id}`} size="sm" variant="secondary">View</ButtonLink>
                   {isAdmin && (
                     <>
-                      {' | '}
-                      <Link to={`/vehicles/${v.id}/edit`}>Edit</Link>
-                      {' | '}
+                      <ButtonLink to={`/vehicles/${v.id}/edit`} size="sm" variant="ghost">Edit</ButtonLink>
                       <button
                         className="btn-link-danger"
+                        type="button"
                         onClick={() => handleDelete(v.id)}
                       >
                         Delete
@@ -193,8 +230,8 @@ export default function VehiclesPage() {
               </tr>
             ))}
           </tbody>
-        </table>
-      </main>
-    </>
+        </ResponsiveTable>
+        )}
+    </PageShell>
   );
 }

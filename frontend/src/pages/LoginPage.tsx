@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { login as apiLogin } from '../api/authApi';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/useAuth';
 import { homeForRole, normalizeRole } from '../auth/roleHome';
 
 export default function LoginPage() {
@@ -72,7 +72,7 @@ export default function LoginPage() {
           </label>
 
           <button type="submit" disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign In'}
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
 

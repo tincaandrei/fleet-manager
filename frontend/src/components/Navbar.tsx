@@ -1,6 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/useAuth';
+import {
+  getUnreadNotificationCount,
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from '../api/notificationApi';
+import type { NotificationResponse } from '../types/notification';
 
 type NavItem = {
   label: string;
@@ -14,6 +21,10 @@ export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationResponse[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
 
   const navItems = useMemo<NavItem[]>(
     () => [
@@ -47,9 +58,35 @@ export default function Navbar() {
 
   const visibleNavItems = navItems.filter((item) => item.visible !== false);
 
+  const loadUnreadCount = useCallback(() => {
+    return getUnreadNotificationCount()
+      .then((res) => setUnreadCount(res.data.count))
+      .catch(() => undefined);
+  }, []);
+
+  const loadNotifications = useCallback(() => {
+    setNotificationsLoading(true);
+    return listNotifications()
+      .then((res) => setNotifications(res.data))
+      .catch(() => undefined)
+      .finally(() => setNotificationsLoading(false));
+  }, []);
+
   useEffect(() => {
-    setIsMenuOpen(false);
+    const timeoutId = window.setTimeout(() => {
+      setIsMenuOpen(false);
+      setNotificationsOpen(false);
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
   }, [location.pathname]);
+
+  useEffect(() => {
+    void loadUnreadCount();
+    const intervalId = window.setInterval(() => {
+      void loadUnreadCount();
+    }, 20000);
+    return () => window.clearInterval(intervalId);
+  }, [loadUnreadCount]);
 
   useEffect(() => {
     document.body.classList.toggle('mobile-menu-open', isMenuOpen);
@@ -72,8 +109,36 @@ export default function Navbar() {
 
   const handleLogout = () => {
     setIsMenuOpen(false);
+    setNotificationsOpen(false);
     logout();
     navigate('/login');
+  };
+
+  const handleToggleNotifications = () => {
+    const nextOpen = !notificationsOpen;
+    setNotificationsOpen(nextOpen);
+    if (nextOpen) {
+      void loadNotifications();
+      void loadUnreadCount();
+    }
+  };
+
+  const handleMarkRead = async (notificationId: string) => {
+    await markNotificationRead(notificationId);
+    setNotifications((current) =>
+      current.map((notification) =>
+        notification.id === notificationId ? { ...notification, isRead: true } : notification,
+      ),
+    );
+    await loadUnreadCount();
+  };
+
+  const handleMarkAllRead = async () => {
+    await markAllNotificationsRead();
+    setNotifications((current) =>
+      current.map((notification) => ({ ...notification, isRead: true })),
+    );
+    setUnreadCount(0);
   };
 
   const isActive = (prefix: string) =>
@@ -95,9 +160,65 @@ export default function Navbar() {
       key={item.to}
       to={item.to}
       className={`${className}${isActive(item.activePrefix) ? ` ${className}--active` : ''}`}
+      onClick={() => setIsMenuOpen(false)}
     >
       {item.label}
     </Link>
+  );
+
+  const renderNotifications = (variant: 'desktop' | 'mobile') => (
+    <div className={`notification-menu notification-menu--${variant}`}>
+      <button
+        type="button"
+        className="notification-trigger"
+        aria-label="Notifications"
+        aria-expanded={notificationsOpen}
+        onClick={handleToggleNotifications}
+      >
+        <span aria-hidden="true">Notifications</span>
+        {unreadCount > 0 && (
+          <span className="notification-count">{unreadCount > 99 ? '99+' : unreadCount}</span>
+        )}
+      </button>
+
+      {notificationsOpen && (
+        <div className="notification-dropdown" role="menu">
+          <div className="notification-dropdown-header">
+            <strong>Notifications</strong>
+            {unreadCount > 0 && (
+              <button type="button" onClick={handleMarkAllRead}>
+                Mark all read
+              </button>
+            )}
+          </div>
+
+          {notificationsLoading && <p className="notification-empty">Loading notifications...</p>}
+
+          {!notificationsLoading && notifications.length === 0 && (
+            <p className="notification-empty">No notifications yet.</p>
+          )}
+
+          {!notificationsLoading && notifications.map((notification) => (
+            <button
+              key={notification.id}
+              type="button"
+              className={`notification-item${notification.isRead ? '' : ' notification-item--unread'}`}
+              onClick={() => {
+                if (!notification.isRead) {
+                  void handleMarkRead(notification.id);
+                }
+              }}
+            >
+              <span className="notification-title">{notification.title}</span>
+              <span className="notification-message">{notification.message}</span>
+              <span className="notification-time">
+                {new Date(notification.createdAt).toLocaleString()}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 
   return (
@@ -112,6 +233,8 @@ export default function Navbar() {
       </div>
 
       <div className="navbar-user">
+        {renderNotifications('desktop')}
+
         <div className="nav-avatar" aria-hidden="true" title={username ?? ''}>
           {initials}
         </div>
@@ -177,6 +300,8 @@ export default function Navbar() {
             {businessName && <span className="nav-business">{businessName}</span>}
           </div>
         </div>
+
+        {renderNotifications('mobile')}
 
         <div className="mobile-nav-links" role="navigation" aria-label="Mobile navigation">
           {visibleNavItems.map((item) => renderNavLink(item, 'mobile-nav-link'))}

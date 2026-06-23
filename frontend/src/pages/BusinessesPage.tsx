@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import Navbar from '../components/Navbar';
 import { assignUnassignedUser, listBusinesses, listUnassignedUsers } from '../api/authApi';
 import type { Business, UserProfile } from '../types/auth';
+import PageShell from '../components/ui/PageShell';
+import PageHeader from '../components/ui/PageHeader';
+import { ButtonLink } from '../components/ui/Button';
+import DataState from '../components/ui/DataState';
+import ResponsiveTable from '../components/ui/ResponsiveTable';
 
 function apiMessage(err: unknown, fallback: string): string {
   const e = err as { response?: { data?: { message?: string } } };
@@ -28,7 +32,8 @@ export default function BusinessesPage() {
   };
 
   useEffect(() => {
-    load();
+    const timeoutId = window.setTimeout(() => load(), 0);
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
   const handleAssigned = (userId: number) => {
@@ -36,18 +41,17 @@ export default function BusinessesPage() {
   };
 
   return (
-    <>
-      <Navbar />
-      <main className="page">
-        <div className="page-header">
-          <h1>Organizations</h1>
-          <Link to="/businesses/new" className="btn">New Organization</Link>
-        </div>
+    <PageShell>
+        <PageHeader
+          title="Organizations"
+          description="Manage organizations and pending account assignments."
+          actions={<ButtonLink to="/businesses/new">New Organization</ButtonLink>}
+        />
 
-        {loading && <p className="doc-empty">Loading organizations...</p>}
-        {!loading && error && <p className="error">{error}</p>}
+        {loading && <DataState type="loading">Loading organizations...</DataState>}
+        {!loading && error && <DataState type="error">{error}</DataState>}
         {!loading && !error && businesses.length === 0 && (
-          <p className="doc-empty">No organizations yet. Create the first one.</p>
+          <DataState>No organizations yet. Create the first one.</DataState>
         )}
 
         {!loading && !error && businesses.length > 0 && (
@@ -58,7 +62,7 @@ export default function BusinessesPage() {
               onAssigned={handleAssigned}
             />
 
-            <table className="vehicles-table">
+            <ResponsiveTable ariaLabel="Organizations">
               <thead>
                 <tr>
                   <th>ID</th>
@@ -87,11 +91,10 @@ export default function BusinessesPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </ResponsiveTable>
           </>
         )}
-      </main>
-    </>
+    </PageShell>
   );
 }
 
@@ -112,15 +115,15 @@ function PendingAccountsSection({ businesses, users, onAssigned }: PendingAccoun
       </div>
 
       {users.length === 0 && (
-        <p className="doc-empty">No accounts are waiting for organization assignment.</p>
+        <DataState>No accounts are waiting for organization assignment.</DataState>
       )}
 
       {users.length > 0 && activeBusinesses.length === 0 && (
-        <p className="error">Create or activate an organization before assigning accounts.</p>
+        <DataState type="error">Create or activate an organization before assigning accounts.</DataState>
       )}
 
       {users.length > 0 && activeBusinesses.length > 0 && (
-        <table className="vehicles-table">
+        <ResponsiveTable ariaLabel="Pending accounts">
           <thead>
             <tr>
               <th>Username</th>
@@ -139,7 +142,7 @@ function PendingAccountsSection({ businesses, users, onAssigned }: PendingAccoun
               />
             ))}
           </tbody>
-        </table>
+        </ResponsiveTable>
       )}
     </section>
   );

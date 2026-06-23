@@ -1,7 +1,7 @@
 import { Link, Navigate } from 'react-router-dom';
-import Navbar from '../components/Navbar';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/useAuth';
 import { homeForRole } from '../auth/roleHome';
+import PageShell from '../components/ui/PageShell';
 
 export default function PendingOrganizationPage() {
   const { role, businessId, username, logout } = useAuth();
@@ -11,9 +11,7 @@ export default function PendingOrganizationPage() {
   }
 
   return (
-    <>
-      <Navbar />
-      <main className="page">
+    <PageShell>
         <section className="pending-panel">
           <div>
             <h1>Organization Assignment Pending</h1>
@@ -34,7 +32,6 @@ export default function PendingOrganizationPage() {
             After an admin assigns your account, sign out and sign in again to refresh your access.
           </p>
         </section>
-      </main>
-    </>
+    </PageShell>
   );
 }

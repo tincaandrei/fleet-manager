@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import Navbar from '../components/Navbar';
+import { useParams, useNavigate } from 'react-router-dom';
 import { getBusiness, createBusiness, updateBusiness } from '../api/authApi';
 import type { BusinessRequest } from '../types/auth';
+import PageShell from '../components/ui/PageShell';
+import PageHeader from '../components/ui/PageHeader';
+import { ButtonLink } from '../components/ui/Button';
+import DataState from '../components/ui/DataState';
 
 function apiMessage(err: unknown, fallback: string): string {
   const e = err as { response?: { data?: { message?: string } } };
@@ -28,19 +31,23 @@ export default function BusinessCreateEditPage() {
 
   useEffect(() => {
     if (!isEdit || !id) return;
-    setLoadError(null);
-    getBusiness(Number(id))
-      .then((res) => {
-        setForm({
-          name: res.data.name ?? '',
-          registrationNumber: res.data.registrationNumber ?? '',
-          contactEmail: res.data.contactEmail ?? '',
-          phone: res.data.phone ?? '',
-          address: res.data.address ?? '',
-          active: res.data.active,
-        });
-      })
-      .catch((err: unknown) => setLoadError(apiMessage(err, 'Failed to load organization.')));
+    const timeoutId = window.setTimeout(() => {
+      setLoadError(null);
+      getBusiness(Number(id))
+        .then((res) => {
+          setForm({
+            name: res.data.name ?? '',
+            registrationNumber: res.data.registrationNumber ?? '',
+            contactEmail: res.data.contactEmail ?? '',
+            phone: res.data.phone ?? '',
+            address: res.data.address ?? '',
+            active: res.data.active,
+          });
+        })
+        .catch((err: unknown) => setLoadError(apiMessage(err, 'Failed to load organization.')));
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [id, isEdit]);
 
   const setField = (field: keyof BusinessRequest, value: string | boolean) => {
@@ -84,18 +91,17 @@ export default function BusinessCreateEditPage() {
   };
 
   return (
-    <>
-      <Navbar />
-      <main className="page">
-        <div className="page-header">
-          <h1>{isEdit ? 'Edit Organization' : 'New Organization'}</h1>
-          <Link to="/businesses">Back to Organizations</Link>
-        </div>
+    <PageShell>
+        <PageHeader
+          title={isEdit ? 'Edit Organization' : 'New Organization'}
+          description="Keep organization details accurate for fleet access and assignment."
+          actions={<ButtonLink to="/businesses" variant="secondary">Back to Organizations</ButtonLink>}
+        />
 
-        {loadError && <p className="error">{loadError}</p>}
+        {loadError && <DataState type="error">{loadError}</DataState>}
 
-        <form onSubmit={handleSubmit} className="auth-form" style={{ maxWidth: 480 }}>
-          {submitError && <p className="error">{submitError}</p>}
+        <form onSubmit={handleSubmit} className="auth-form management-form">
+          {submitError && <DataState type="error">{submitError}</DataState>}
 
           <label>
             Organization Name
@@ -158,7 +164,6 @@ export default function BusinessCreateEditPage() {
             {loading ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Organization'}
           </button>
         </form>
-      </main>
-    </>
+    </PageShell>
   );
 }

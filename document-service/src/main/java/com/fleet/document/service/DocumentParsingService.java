@@ -179,19 +179,21 @@ public class DocumentParsingService {
         }
     }
 
-    private DocumentTypeDetection detect(String text) {
+    DocumentTypeDetection detect(String text) {
         String normalized = normalizeForDetection(text);
-        if (containsAny(normalized, "rovigneta", "rovinieta", "roviniete", "erovinieta", "tarif de utilizare", "categoria vehiculului", "cnadnr")) {
+        if (containsAny(normalized, "rovigneta", "rovinieta", "roviniete", "erovinieta", "tarif de utilizare", "cnadnr")) {
             return new DocumentTypeDetection(DocumentType.ROAD_TAX, "ROVINIETA");
         }
-        if (containsAny(normalized, "factura", "bon fiscal", "invoice", "receipt", "tva", "cui")) {
+        if (containsAny(normalized, "asigurare", "asigurari", "asigurator", "polita", "carte verde", "bonus malus", "raspundere civila auto")
+                || containsAnyToken(normalized, "rca")) {
+            return new DocumentTypeDetection(DocumentType.INSURANCE, "RCA");
+        }
+        if (containsAny(normalized, "factura", "bon fiscal", "invoice", "receipt", "tva")) {
             return new DocumentTypeDetection(DocumentType.EXPENSE_INVOICE, "UNKNOWN");
         }
-        if (containsAny(normalized, "inspectie tehnica periodica", "itp", "rar", "valabilitate inspectie")) {
+        if (containsAny(normalized, "inspectie tehnica periodica", "valabilitate inspectie")
+                || containsAnyToken(normalized, "itp", "rar")) {
             return new DocumentTypeDetection(DocumentType.TECHNICAL_INSPECTION, "ITP");
-        }
-        if (containsAny(normalized, "asigurare", "polita", "rca", "carte verde", "bonus malus")) {
-            return new DocumentTypeDetection(DocumentType.INSURANCE, "RCA");
         }
         return new DocumentTypeDetection(DocumentType.OTHER, "UNKNOWN");
     }
@@ -407,6 +409,15 @@ public class DocumentParsingService {
         return false;
     }
 
+    private boolean containsAnyToken(String value, String... tokens) {
+        for (String token : tokens) {
+            if (Pattern.compile("(?<![a-z0-9])" + Pattern.quote(token) + "(?![a-z0-9])").matcher(value).find()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean hasValue(JsonNode data, String field) {
         if (data == null || data.isNull()) {
             return false;
@@ -516,7 +527,7 @@ public class DocumentParsingService {
     private record TextExtractionResult(String text, double textQualityScore) {
     }
 
-    private record DocumentTypeDetection(DocumentType documentType, String subtype) {
+    record DocumentTypeDetection(DocumentType documentType, String subtype) {
     }
 
     private record NormalizedExtraction(JsonNode extractedData, List<String> warnings, double llmConfidence) {

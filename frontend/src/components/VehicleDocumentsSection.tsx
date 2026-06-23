@@ -7,7 +7,7 @@ import {
   reviewDocument,
   archiveDocument,
 } from '../api/documentApi';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/useAuth';
 import DocumentInfoFolderPanel from './DocumentInfoFolder';
 import { showToast } from '../utils/toast';
 
@@ -505,9 +505,13 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
         }
       } else if (uploaded.status === 'PARSING') {
         setTrackedUploadId(uploaded.id);
+        showToast({
+          type: 'info',
+          message: 'Document uploaded. Parsing is running in the background.',
+        });
         setUploadNotice({
           type: 'info',
-          message: 'Document uploaded. Automatic parsing is running; this list will update when it finishes.',
+          message: 'Document uploaded. Parsing is running in the background.',
         });
       } else {
         showToast({ type: 'success', message: 'Document uploaded successfully.' });
@@ -617,7 +621,7 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
       )}
 
       {actionError && (
-        <p className="error" style={{ marginBottom: '0.75rem' }}>{actionError}</p>
+        <p className="error doc-action-error">{actionError}</p>
       )}
 
       {loading && <p className="doc-empty">Loading documents…</p>}
@@ -695,7 +699,7 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
                       <span>Valid until: {doc.approvedData.validUntil}</span>
                     )}
                   </div>
-                  <details className="raw-parser" style={{ marginTop: '0.4rem' }}>
+                  <details className="raw-parser raw-parser-approved">
                     <summary>Full approved data</summary>
                     <pre>{JSON.stringify(doc.approvedData.approvedData, null, 2)}</pre>
                   </details>

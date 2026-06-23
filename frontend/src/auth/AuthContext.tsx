@@ -1,32 +1,8 @@
-import { createContext, useContext, useState } from 'react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { Role } from '../types/auth';
 import { normalizeRole } from './roleHome';
-
-interface AuthContextType {
-  token: string | null;
-  username: string | null;
-  role: Role | null;
-  userId: number | null;
-  businessId: number | null;
-  businessName: string | null;
-  /** True for SUPERADMIN and BUSINESS_ADMIN (can manage fleet). */
-  isAdmin: boolean;
-  isSuperAdmin: boolean;
-  isBusinessAdmin: boolean;
-  isEmployee: boolean;
-  login: (
-    token: string,
-    username: string,
-    role: Role,
-    userId: number,
-    businessId: number | null,
-    businessName: string | null,
-  ) => void;
-  logout: () => void;
-}
-
-const AuthContext = createContext<AuthContextType | null>(null);
+import { AuthContext } from './AuthStateContext';
 
 function storedNumber(key: string): number | null {
   const v = localStorage.getItem(key);
@@ -114,10 +90,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
-  return ctx;
 }
