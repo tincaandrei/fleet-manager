@@ -1,7 +1,8 @@
-package com.fleet.document.service;
+package com.fleet.document.service.parsing;
 
 import com.fleet.document.entity.TextExtractionMethod;
 import com.fleet.document.entity.VehicleDocument;
+import com.fleet.document.service.DocumentStorageService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -91,6 +92,28 @@ class DocumentTextExtractionServiceTest {
     }
 
     @Test
+    void imageDocumentUsesOcrDirectly() {
+        VehicleDocument document = document();
+        document.setOriginalFileName("rovinieta.jpg");
+        document.setContentType("image/jpeg");
+        when(storageService.load(document.getStoragePath())).thenReturn(new ByteArrayResource(new byte[]{1, 2, 3}));
+        when(ocrTextExtractionService.extractImage(any(byte[].class))).thenReturn(new ExtractedTextResult(
+                "Rovinieta CNAIR valabila pentru numar inmatriculare B123ABC",
+                TextExtractionMethod.OCR,
+                1,
+                List.of(),
+                0.0
+        ));
+
+        ExtractedTextResult result = extractionService.extractText(document);
+
+        assertThat(result.extractionMethod()).isEqualTo(TextExtractionMethod.OCR);
+        assertThat(result.warnings()).contains("OCR extraction may contain errors. Please verify manually.");
+        verifyNoInteractions(pdfBoxTextExtractionService);
+        verify(ocrTextExtractionService).extractImage(any(byte[].class));
+    }
+
+    @Test
     void corruptedPdfBoxTextFallsBackToOcr() {
         VehicleDocument document = document();
         when(storageService.load(document.getStoragePath())).thenReturn(new ByteArrayResource(new byte[]{1, 2, 3}));
@@ -138,6 +161,8 @@ class DocumentTextExtractionServiceTest {
     private VehicleDocument document() {
         VehicleDocument document = new VehicleDocument();
         document.setId(UUID.randomUUID());
+        document.setOriginalFileName("document.pdf");
+        document.setContentType("application/pdf");
         document.setStoragePath("/tmp/document.pdf");
         return document;
     }

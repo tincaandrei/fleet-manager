@@ -2,13 +2,14 @@
 // These are the only types/subtypes the backend parser produces.
 // CIV / REGISTRATION must NOT appear anywhere in the UI.
 
-export type CanonicalDocumentType =
+export type DocumentType =
   | 'INSURANCE'
   | 'TECHNICAL_INSPECTION'
   | 'ROAD_TAX'
   | 'EXPENSE_INVOICE'
   | 'OTHER';
 
+export type CanonicalDocumentType = DocumentType;
 export type CanonicalSubtype = 'RCA' | 'ITP' | 'ROVINIETA' | 'UNKNOWN';
 
 // ── Document & status enums ───────────────────────────────────────────────────
@@ -19,7 +20,8 @@ export type DocumentStatus =
   | 'NEEDS_REVIEW'
   | 'VALIDATED'
   | 'REJECTED'
-  | 'ARCHIVED';
+  | 'ARCHIVED'
+  | 'FAILED';
 export type ApprovedDataStatus = 'ACTIVE' | 'SUPERSEDED' | 'ARCHIVED';
 export type ParserStatus =
   | 'PARSED'
@@ -27,6 +29,26 @@ export type ParserStatus =
   | 'PARTIAL'
   | 'PENDING';
 export type TextExtractionMethod = 'PDFBOX' | 'OCR';
+export type FieldType = 'text' | 'date' | 'number' | 'select' | 'textarea';
+
+export type ReviewFieldDefinition = {
+  key: string;
+  label: string;
+  type: FieldType;
+  required?: boolean;
+  options?: string[];
+};
+
+export type ParserReviewResponse = {
+  documentId: string;
+  documentType: DocumentType;
+  subtype?: string | null;
+  status: string;
+  extractionMethod?: TextExtractionMethod | null;
+  confidence?: number | null;
+  extractedData: Record<string, unknown>;
+  warnings?: string[];
+};
 
 // ── Extraction draft (unapproved parser output) ───────────────────────────────
 
@@ -62,7 +84,7 @@ export interface DocumentResponse {
   id: string;
   vehicleId: number;
   /** The parser-determined canonical document type (no manual override at upload). */
-  documentType: string;
+  documentType: DocumentType;
   status: DocumentStatus;
   originalFileName: string;
   storedFileName: string;

@@ -1,4 +1,4 @@
-package com.fleet.document.service;
+package com.fleet.document.service.parsing;
 
 public class TextExtractionException extends RuntimeException {
 

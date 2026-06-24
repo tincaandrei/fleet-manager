@@ -1,5 +1,10 @@
-import { useCallback, useEffect, useState, useRef } from 'react';
-import type { DocumentResponse, DocumentExtractionResponse } from '../types/document';
+import { useCallback, useEffect, useState, useRef, type ChangeEvent, type FormEvent } from 'react';
+import type {
+  DocumentResponse,
+  DocumentExtractionResponse,
+  DocumentType,
+  ReviewFieldDefinition,
+} from '../types/document';
 import {
   listDocumentsByVehicle,
   uploadDocument,
@@ -10,35 +15,17 @@ import {
 import { useAuth } from '../auth/useAuth';
 import DocumentInfoFolderPanel from './DocumentInfoFolder';
 import { showToast } from '../utils/toast';
+import { getReviewFields } from './documentReviewFields';
 
 // ── Review form state ─────────────────────────────────────────────────────────
 
-/**
- * Structured fields shown in the approval form.
- * All values are kept as strings so they bind cleanly to <input type="text">.
- */
-interface ReviewFields {
-  documentType: string;
-  subtype: string;
-  licensePlate: string;
-  vin: string;
-  validFrom: string;
-  validUntil: string;
-  policyNumber: string;
-  inspectionNumber: string;
-  invoiceNumber: string;
-  category: string;
-  issuer: string;
-  transactionId: string;
-  totalAmount: string;
-  amount: string;
-  currency: string;
-  expenseCategory: string;
-}
+type ReviewFields = Record<string, string>;
 
 interface ReviewState {
   docId: string;
   decision: 'APPROVE' | 'REJECT';
+  documentType: DocumentType;
+  subtype: string | null;
   fields: ReviewFields;
   comment: string;
   loading: boolean;
@@ -49,6 +36,10 @@ type UploadNotice = {
   type: 'info' | 'success' | 'error';
   message: string;
 };
+
+const ACCEPTED_DOCUMENT_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png'];
+const ACCEPTED_DOCUMENT_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
+const ACCEPTED_DOCUMENT_INPUT = '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -67,6 +58,12 @@ function apiMessage(err: unknown, fallback: string): string {
   return e?.response?.data?.message ?? fallback;
 }
 
+function isAcceptedDocumentFile(file: File): boolean {
+  const fileName = file.name.toLowerCase();
+  return ACCEPTED_DOCUMENT_TYPES.includes(file.type)
+    || ACCEPTED_DOCUMENT_EXTENSIONS.some((extension) => fileName.endsWith(extension));
+}
+
 /** Safely coerce an unknown extraction value to a display string. */
 function str(val: unknown): string {
   if (val === null || val === undefined) return '';
@@ -75,43 +72,77 @@ function str(val: unknown): string {
   return '';
 }
 
+const PLACEHOLDER_VALUES = new Set(['string', 'number', 'yyyy-mm-dd', 'null', '-', 'n/a']);
+
+function isPlaceholderValue(value: unknown): boolean {
+  return typeof value === 'string' && PLACEHOLDER_VALUES.has(value.trim().toLowerCase());
+}
+
+function sanitizeParserValue(value: unknown): string | number | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (isPlaceholderValue(value)) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'boolean') return String(value);
+  return null;
+}
+
 function dateOnly(val: unknown): string {
-  const value = str(val).trim();
+  const sanitized = sanitizeParserValue(val);
+  const value = typeof sanitized === 'string' || typeof sanitized === 'number'
+    ? String(sanitized).trim()
+    : '';
   return /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : value;
+}
+
+function normalizeDocumentType(value: unknown): DocumentType {
+  const normalized = str(sanitizeParserValue(value)).toUpperCase();
+  if (
+    normalized === 'ROAD_TAX' ||
+    normalized === 'INSURANCE' ||
+    normalized === 'TECHNICAL_INSPECTION' ||
+    normalized === 'EXPENSE_INVOICE' ||
+    normalized === 'OTHER'
+  ) {
+    return normalized;
+  }
+  return 'OTHER';
 }
 
 /**
  * Pre-populate ReviewFields from parser extraction data.
  */
 function fieldsFromExtraction(
+  documentType: DocumentType,
+  subtype: string | null,
   extraction: DocumentExtractionResponse | null | undefined,
 ): ReviewFields {
   const data = extraction?.extractedData ?? {};
-  return {
-    documentType: str(data['documentType']) || extraction?.detectedDocumentType || '',
-    subtype: str(data['subtype']) || extraction?.detectedSubtype || '',
-    licensePlate: str(data['licensePlate']),
-    vin: str(data['vin']),
-    validFrom: dateOnly(data['validFrom']),
-    validUntil: dateOnly(data['validUntil']),
-    policyNumber: str(data['policyNumber']),
-    inspectionNumber: str(data['inspectionNumber']),
-    invoiceNumber: str(data['invoiceNumber']),
-    category: str(data['category']),
-    issuer: str(data['issuer']),
-    transactionId: str(data['transactionId']),
-    totalAmount: str(data['totalAmount']),
-    amount: str(data['amount']),
-    currency: str(data['currency']),
-    expenseCategory: str(data['expenseCategory']),
-  };
+  return getReviewFields(documentType, subtype).reduce<ReviewFields>((acc, field) => {
+    const value = sanitizeParserValue(data[field.key]);
+    if (field.type === 'date') {
+      acc[field.key] = dateOnly(value);
+    } else if (value !== null) {
+      acc[field.key] = String(value);
+    } else {
+      acc[field.key] = '';
+    }
+    return acc;
+  }, {});
 }
 
 function reviewStateFor(doc: DocumentResponse, decision: 'APPROVE' | 'REJECT'): ReviewState {
+  const data = doc.extraction?.extractedData ?? {};
+  const documentType = normalizeDocumentType(
+    doc.documentType || data['documentType'] || doc.extraction?.detectedDocumentType,
+  );
+  const subtype = str(sanitizeParserValue(data['subtype'])) || doc.extraction?.detectedSubtype || null;
   return {
     docId: doc.id,
     decision,
-    fields: fieldsFromExtraction(doc.extraction),
+    documentType,
+    subtype,
+    fields: fieldsFromExtraction(documentType, subtype, doc.extraction),
     comment: '',
     loading: false,
     error: null,
@@ -122,37 +153,63 @@ function parserFailureMessage(doc: DocumentResponse): string {
   return doc.extraction?.errorMessage ?? 'Automatic parsing failed. The uploaded PDF is stored, but no structured data could be extracted.';
 }
 
+function documentStatusLabel(status: DocumentResponse['status']): string {
+  switch (status) {
+    case 'PARSING':
+      return 'Parsing';
+    case 'NEEDS_REVIEW':
+      return 'Needs review';
+    case 'VALIDATED':
+      return 'Validated';
+    case 'REJECTED':
+      return 'Rejected';
+    case 'ARCHIVED':
+      return 'Archived';
+    case 'FAILED':
+    case 'PARSING_FAILED':
+      return 'Parsing failed';
+    default:
+      return status;
+  }
+}
+
 /**
- * Build the approvedData payload from structured form fields.
- * Omits fields that are blank strings.
+ * Build the approvedData payload from type-specific review fields.
+ * Omits unrelated fields and blank strings.
  */
-function buildApprovedData(fields: ReviewFields): Record<string, unknown> {
+function buildApprovedData(
+  state: ReviewState,
+  extraction: DocumentExtractionResponse | null | undefined,
+): Record<string, unknown> {
   const obj: Record<string, unknown> = {};
-  const add = (k: string, v: string) => { if (v.trim()) obj[k] = v.trim(); };
-  add('documentType', fields.documentType);
-  add('subtype', fields.subtype);
-  add('licensePlate', fields.licensePlate);
-  add('vin', fields.vin);
-  add('validFrom', fields.validFrom);
-  add('validUntil', fields.validUntil);
-  add('policyNumber', fields.policyNumber);
-  add('inspectionNumber', fields.inspectionNumber);
-  add('invoiceNumber', fields.invoiceNumber);
-  add('category', fields.category);
-  add('issuer', fields.issuer);
-  add('transactionId', fields.transactionId);
-  add('totalAmount', fields.totalAmount);
-  add('amount', fields.amount);
-  add('currency', fields.currency);
-  add('expenseCategory', fields.expenseCategory);
+  const originalData = extraction?.extractedData ?? {};
+
+  obj.documentType = state.documentType;
+  if (state.subtype) obj.subtype = state.subtype;
+
+  getReviewFields(state.documentType, state.subtype).forEach((field) => {
+    if (field.key === 'items' && Array.isArray(originalData.items)) {
+      obj.items = originalData.items;
+      return;
+    }
+
+    const raw = state.fields[field.key]?.trim();
+    if (!raw) return;
+
+    if (field.type === 'number') {
+      const numeric = Number(raw);
+      obj[field.key] = Number.isFinite(numeric) ? numeric : raw;
+    } else {
+      obj[field.key] = raw;
+    }
+  });
   return obj;
 }
 
 function formatExtractedValue(value: unknown): string {
-  if (value === null || value === undefined || value === '') return '-';
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return String(value);
-  }
+  const sanitized = sanitizeParserValue(value);
+  if (sanitized === null) return '-';
+  if (typeof sanitized === 'string' || typeof sanitized === 'number') return String(sanitized);
   return JSON.stringify(value);
 }
 
@@ -163,43 +220,29 @@ function humanizeKey(key: string): string {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function ExtractedDataPreview({ extraction }: { extraction: DocumentExtractionResponse | null | undefined }) {
+function ExtractedDataPreview({
+  extraction,
+  fields,
+}: {
+  extraction: DocumentExtractionResponse | null | undefined;
+  fields: ReviewFieldDefinition[];
+}) {
   const data = extraction?.extractedData;
   if (!data || Object.keys(data).length === 0) {
     return null;
   }
 
-  const priority = [
-    'documentType',
-    'subtype',
-    'licensePlate',
-    'vin',
-    'validFrom',
-    'validUntil',
-    'category',
-    'issuer',
-    'transactionId',
-    'amount',
-    'currency',
-    'invoiceNumber',
-    'invoiceDate',
-    'supplierName',
-    'totalAmount',
-    'expenseCategory',
-  ];
-  const keys = [
-    ...priority.filter((key) => Object.prototype.hasOwnProperty.call(data, key)),
-    ...Object.keys(data).filter((key) => !priority.includes(key)),
-  ];
+  const visibleFields = fields.filter((field) => Object.prototype.hasOwnProperty.call(data, field.key));
+  if (visibleFields.length === 0) return null;
 
   return (
     <div className="extracted-preview">
       <strong>Extracted parser data</strong>
       <div className="extracted-preview-grid">
-        {keys.map((key) => (
-          <div key={key} className="extracted-preview-row">
-            <span>{humanizeKey(key)}</span>
-            <code>{formatExtractedValue(data[key])}</code>
+        {visibleFields.map((field) => (
+          <div key={field.key} className="extracted-preview-row">
+            <span>{field.label || humanizeKey(field.key)}</span>
+            <code>{formatExtractedValue(data[field.key])}</code>
           </div>
         ))}
       </div>
@@ -214,12 +257,12 @@ function ParsedDocumentSummary({ extraction }: { extraction: DocumentExtractionR
   }
 
   const summary = [
-    ['License plate', str(data['licensePlate'])],
-    ['VIN', str(data['vin'])],
+    ['License plate', str(sanitizeParserValue(data['licensePlate']))],
+    ['VIN', str(sanitizeParserValue(data['vin']))],
     ['Valid from', dateOnly(data['validFrom'])],
     ['Valid until', dateOnly(data['validUntil'])],
-    ['Category', str(data['category'])],
-    ['Issuer', str(data['issuer'])],
+    ['Category', str(sanitizeParserValue(data['category']))],
+    ['Issuer', str(sanitizeParserValue(data['issuer']))],
   ].filter(([, value]) => value);
 
   if (summary.length === 0) {
@@ -233,6 +276,93 @@ function ParsedDocumentSummary({ extraction }: { extraction: DocumentExtractionR
           <strong>{label}:</strong> {value}
         </span>
       ))}
+    </div>
+  );
+}
+
+function formatConfidence(confidence: number | null | undefined): string {
+  if (confidence === null || confidence === undefined) return '-';
+  return `${Math.round(confidence * 100)}%`;
+}
+
+function ParserMetadata({
+  state,
+  extraction,
+}: {
+  state: ReviewState;
+  extraction: DocumentExtractionResponse | null | undefined;
+}) {
+  return (
+    <div className="parser-metadata">
+      <span>Document type: <strong>{state.documentType}</strong></span>
+      <span>Subtype: <strong>{state.subtype || '-'}</strong></span>
+      <span>Status: <strong>{extraction?.parserStatus ?? '-'}</strong></span>
+      <span>Extraction: <strong>{extraction?.extractionMethod ?? '-'}</strong></span>
+      <span>Confidence: <strong>{formatConfidence(extraction?.confidence)}</strong></span>
+      {extraction?.extractionMethod === 'OCR' && (
+        <span className="parser-metadata-warning">
+          This document was processed with OCR. Please verify the fields manually.
+        </span>
+      )}
+    </div>
+  );
+}
+
+function WarningsPanel({ warnings }: { warnings?: string[] | null }) {
+  if (!warnings || warnings.length === 0) return null;
+  return (
+    <div className="parser-warning-panel">
+      <strong>Warnings</strong>
+      <ul>
+        {warnings.map((warning, index) => (
+          <li key={`${warning}-${index}`}>{warning}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function InvoiceItemsPreview({ items }: { items: unknown }) {
+  if (!Array.isArray(items) || items.length === 0) return null;
+
+  const itemObjects = items.filter((item): item is Record<string, unknown> =>
+    item !== null && typeof item === 'object' && !Array.isArray(item),
+  );
+
+  if (itemObjects.length === 0) {
+    return (
+      <div className="invoice-items-preview">
+        <strong>Invoice items</strong>
+        <pre>{JSON.stringify(items, null, 2)}</pre>
+      </div>
+    );
+  }
+
+  const columns = Array.from(new Set(itemObjects.flatMap((item) => Object.keys(item)))).slice(0, 6);
+
+  return (
+    <div className="invoice-items-preview">
+      <strong>Invoice items</strong>
+      <div className="invoice-items-table-wrap">
+        <table className="invoice-items-table">
+          <thead>
+            <tr>
+              {columns.map((column) => (
+                <th key={column}>{humanizeKey(column)}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {itemObjects.map((item, index) => (
+              <tr key={index}>
+                {columns.map((column) => (
+                  <td key={column}>{formatExtractedValue(item[column])}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -257,41 +387,61 @@ function ReviewForm({
   onCancel,
 }: ReviewFormProps) {
   const f = state.fields;
-  const field = (label: string, key: keyof ReviewFields, placeholder?: string) => (
-    <label className="review-field-label">
-      {label}
-      <input
-        type="text"
-        value={f[key]}
-        placeholder={placeholder ?? ''}
-        onChange={(e) => onChange({ [key]: e.target.value })}
-      />
-    </label>
-  );
+  const fieldDefinitions = getReviewFields(state.documentType, state.subtype);
+  const extractedData = extraction?.extractedData ?? {};
+  const hasPlaceholderValues = fieldDefinitions.some((field) => isPlaceholderValue(extractedData[field.key]));
+
+  const renderField = (field: ReviewFieldDefinition) => {
+    if (field.key === 'items' && Array.isArray(extractedData.items)) {
+      return <InvoiceItemsPreview key={field.key} items={extractedData.items} />;
+    }
+
+    const value = f[field.key] ?? '';
+    const commonProps = {
+      id: `${state.docId}-${field.key}`,
+      value,
+      onChange: (e: ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+        onChange({ [field.key]: e.target.value }),
+    };
+
+    return (
+      <label key={field.key} className="review-field-label" htmlFor={`${state.docId}-${field.key}`}>
+        {field.label}{field.required ? ' *' : ''}
+        {field.type === 'select' ? (
+          <select {...commonProps}>
+            <option value="">Select...</option>
+            {field.options?.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        ) : field.type === 'textarea' ? (
+          <textarea {...commonProps} rows={3} />
+        ) : (
+          <input
+            {...commonProps}
+            type={field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : 'text'}
+            step={field.type === 'number' ? 'any' : undefined}
+          />
+        )}
+      </label>
+    );
+  };
 
   return (
     <div className="doc-review-form">
       {state.decision === 'APPROVE' ? (
         <>
-          <ExtractedDataPreview extraction={extraction} />
+          <ParserMetadata state={state} extraction={extraction} />
+          <WarningsPanel warnings={extraction?.warnings} />
+          {hasPlaceholderValues && (
+            <div className="parser-warning-panel">
+              Parser placeholder value was removed from display.
+            </div>
+          )}
+          <ExtractedDataPreview extraction={extraction} fields={fieldDefinitions} />
 
           <div className="doc-review-fields">
-            {field('Document type', 'documentType')}
-            {field('Subtype', 'subtype', 'e.g. RCA, ITP, ROVINIETA')}
-            {field('License plate', 'licensePlate')}
-            {field('VIN', 'vin')}
-            {field('Valid from', 'validFrom', 'YYYY-MM-DD')}
-            {field('Valid until', 'validUntil', 'YYYY-MM-DD')}
-            {field('Category', 'category')}
-            {field('Issuer', 'issuer')}
-            {field('Transaction ID', 'transactionId')}
-            {field('Amount', 'amount')}
-            {field('Currency', 'currency')}
-            {field('Policy number', 'policyNumber')}
-            {field('Inspection number', 'inspectionNumber')}
-            {field('Invoice number', 'invoiceNumber')}
-            {field('Total amount', 'totalAmount')}
-            {field('Expense category', 'expenseCategory')}
+            {fieldDefinitions.map(renderField)}
           </div>
 
           <label className="review-field-label">
@@ -306,7 +456,7 @@ function ReviewForm({
           {extraction && (
             <details className="raw-parser">
               <summary>Raw parser data</summary>
-              <pre>{JSON.stringify(extraction, null, 2)}</pre>
+              <pre>{JSON.stringify(extraction.extractedData ?? {}, null, 2)}</pre>
             </details>
           )}
         </>
@@ -438,7 +588,7 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
     const uploadedDoc = docs.find((doc) => doc.id === trackedUploadId);
     if (!uploadedDoc || uploadedDoc.status === 'PARSING') return;
 
-    if (uploadedDoc.status === 'PARSING_FAILED') {
+    if (uploadedDoc.status === 'PARSING_FAILED' || uploadedDoc.status === 'FAILED') {
       const message = `Document uploaded, but parser failed: ${parserFailureMessage(uploadedDoc)}`;
       setUploadNotice({ type: 'error', message });
       showToast({ type: 'error', message, durationMs: 7000 });
@@ -462,16 +612,16 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
 
   // ── Upload ──────────────────────────────────────────────────────────────────
 
-  const handleUpload = async (e: React.FormEvent) => {
+  const handleUpload = async (e: FormEvent) => {
     e.preventDefault();
     if (!uploadFile) {
       setUploadNotice({ type: 'error', message: 'Please select a PDF file.' });
       showToast({ type: 'error', message: 'Please select a PDF file.' });
       return;
     }
-    if (!uploadFile.name.toLowerCase().endsWith('.pdf') && uploadFile.type !== 'application/pdf') {
-      setUploadNotice({ type: 'error', message: 'Only PDF files are accepted.' });
-      showToast({ type: 'error', message: 'Only PDF files are accepted.' });
+    if (!isAcceptedDocumentFile(uploadFile)) {
+      setUploadNotice({ type: 'error', message: 'Only PDF, JPG, JPEG, or PNG files are accepted.' });
+      showToast({ type: 'error', message: 'Only PDF, JPG, JPEG, or PNG files are accepted.' });
       return;
     }
     setUploading(true);
@@ -498,7 +648,7 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
         if (canReview) {
           setReviewState(reviewStateFor(uploaded, 'APPROVE'));
         }
-      } else if (uploaded.status === 'PARSING_FAILED') {
+      } else if (uploaded.status === 'PARSING_FAILED' || uploaded.status === 'FAILED') {
         const parserMessage = parserFailureMessage(uploaded);
         showToast({
           type: 'error',
@@ -566,16 +716,24 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
   const cancelReview = () => setReviewState(null);
 
   const patchFields = (patch: Partial<ReviewFields>) =>
-    setReviewState((s) => s ? { ...s, fields: { ...s.fields, ...patch } } : null);
+    setReviewState((s) => {
+      if (!s) return null;
+      const fields = { ...s.fields };
+      Object.entries(patch).forEach(([key, value]) => {
+        if (value !== undefined) fields[key] = value;
+      });
+      return { ...s, fields };
+    });
 
   const submitReview = async () => {
     if (!reviewState) return;
+    const reviewedDoc = docs.find((doc) => doc.id === reviewState.docId);
     setReviewState((s) => s ? { ...s, loading: true, error: null } : null);
     try {
       if (reviewState.decision === 'APPROVE') {
         await reviewDocument(reviewState.docId, {
           decision: 'APPROVE',
-          approvedData: buildApprovedData(reviewState.fields),
+          approvedData: buildApprovedData(reviewState, reviewedDoc?.extraction),
           comment: reviewState.comment || undefined,
         });
       } else {
@@ -615,11 +773,11 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".pdf,application/pdf"
+          accept={ACCEPTED_DOCUMENT_INPUT}
           onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
         />
         <button type="submit" disabled={uploading}>
-          {uploading ? 'Uploading…' : 'Upload PDF'}
+          {uploading ? 'Uploading…' : 'Upload document'}
         </button>
       </form>
 
@@ -659,7 +817,9 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
                   {doc.documentType && (
                     <span className="badge">{doc.documentType}</span>
                   )}
-                  <span className={`status-badge status-${doc.status}`}>{doc.status}</span>
+                  <span className={`status-badge status-${doc.status}`}>
+                    {documentStatusLabel(doc.status)}
+                  </span>
                 </div>
               </div>
 
@@ -679,7 +839,8 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
               )}
 
               {/* Parser error */}
-              {(doc.status === 'PARSING_FAILED' || doc.extraction?.parserStatus === 'FAILED') && (
+              {((doc.status === 'PARSING_FAILED' || doc.status === 'FAILED') ||
+                doc.extraction?.parserStatus === 'FAILED') && (
                 <p className="doc-error-msg">
                   Automatic parsing failed: {parserFailureMessage(doc)}
                 </p>
@@ -725,6 +886,7 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
                 {(doc.status === 'VALIDATED' ||
                   doc.status === 'NEEDS_REVIEW' ||
                   doc.status === 'PARSING_FAILED' ||
+                  doc.status === 'FAILED' ||
                   doc.approvedData != null) && (
                   <button
                     type="button"
@@ -737,7 +899,9 @@ export default function VehicleDocumentsSection({ vehicleId }: Props) {
                   </button>
                 )}
 
-                {canReview && (doc.status === 'NEEDS_REVIEW' || doc.status === 'PARSING_FAILED') && !reviewing && (
+                {canReview &&
+                  (doc.status === 'NEEDS_REVIEW' || doc.status === 'PARSING_FAILED' || doc.status === 'FAILED') &&
+                  !reviewing && (
                   <>
                     {doc.status === 'NEEDS_REVIEW' && (
                       <button

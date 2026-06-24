@@ -23,22 +23,22 @@ public class DocumentStorageService {
     private final DocumentStorageProperties storageProperties;
 
     public StoredDocumentFile save(MultipartFile file) {
-        validatePdf(file);
+        StoredFileType fileType = validateSupportedDocument(file);
         try {
             Path storageRoot = storageRoot();
             Files.createDirectories(storageRoot);
 
             String originalFileName = StringUtils.cleanPath(file.getOriginalFilename() == null
-                    ? "document.pdf"
+                    ? "document" + fileType.extension()
                     : file.getOriginalFilename());
-            String storedFileName = UUID.randomUUID() + ".pdf";
+            String storedFileName = UUID.randomUUID() + fileType.extension();
             Path target = storageRoot.resolve(storedFileName).normalize();
             file.transferTo(target);
 
             return new StoredDocumentFile(
                     originalFileName,
                     storedFileName,
-                    file.getContentType() == null ? "application/pdf" : file.getContentType(),
+                    file.getContentType() == null ? fileType.contentType() : file.getContentType(),
                     file.getSize(),
                     target.toString()
             );
@@ -60,21 +60,35 @@ public class DocumentStorageService {
         }
     }
 
-    private void validatePdf(MultipartFile file) {
+    private StoredFileType validateSupportedDocument(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("PDF file is required");
+            throw new IllegalArgumentException("Document file is required");
         }
         String contentType = file.getContentType();
-        String originalFileName = file.getOriginalFilename();
-        boolean contentTypePdf = "application/pdf".equalsIgnoreCase(contentType);
-        boolean extensionPdf = originalFileName != null
-                && originalFileName.toLowerCase(Locale.ROOT).endsWith(".pdf");
-        if (!contentTypePdf && !extensionPdf) {
-            throw new IllegalArgumentException("Only PDF documents are accepted");
+        String originalFileName = file.getOriginalFilename() == null
+                ? ""
+                : file.getOriginalFilename().toLowerCase(Locale.ROOT);
+
+        if ("application/pdf".equalsIgnoreCase(contentType) || originalFileName.endsWith(".pdf")) {
+            return new StoredFileType(".pdf", "application/pdf");
         }
+        if ("image/jpeg".equalsIgnoreCase(contentType)
+                || "image/jpg".equalsIgnoreCase(contentType)
+                || originalFileName.endsWith(".jpg")
+                || originalFileName.endsWith(".jpeg")) {
+            return new StoredFileType(originalFileName.endsWith(".jpeg") ? ".jpeg" : ".jpg", "image/jpeg");
+        }
+        if ("image/png".equalsIgnoreCase(contentType) || originalFileName.endsWith(".png")) {
+            return new StoredFileType(".png", "image/png");
+        }
+
+        throw new IllegalArgumentException("Only PDF, JPG, JPEG, or PNG documents are accepted");
     }
 
     private Path storageRoot() {
         return Path.of(storageProperties.getPath()).toAbsolutePath().normalize();
+    }
+
+    private record StoredFileType(String extension, String contentType) {
     }
 }
