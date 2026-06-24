@@ -2,7 +2,7 @@
 
 Acest document este un rezumat al proiectului **Fleet Manager** si poate fi folosit ca prompt/context initial pentru ChatGPT atunci cand redactez capitolele lucrarii de licenta. Scopul este ca asistentul sa inteleaga rapid domeniul, arhitectura, functionalitatile si stadiul implementarii, fara sa fie nevoie sa analizeze din nou intregul cod sursa.
 
-Important: nu include in documentatie valori reale din `.env`, parole, secrete JWT sau chei interne. Foloseste doar denumiri generice precum `JWT_SECRET`, `DOCUMENT_DB_PASSWORD` sau `OLLAMA_MODEL`.
+Important: nu include in documentatie valori reale din `.env`, parole, secrete JWT sau chei interne. Foloseste doar denumiri generice precum `JWT_SECRET`, `DOCUMENT_DB_PASSWORD` sau `OPENAI_MODEL`.
 
 ## 1. Tema proiectului
 
@@ -71,15 +71,15 @@ Document parsing:
 
 - Apache PDFBox pentru extragerea textului din PDF;
 - serviciu OCR abstractizat, cu implementare stub in proiect;
-- Ollama ca runtime local pentru model LLM;
-- model configurabil prin variabila `OLLAMA_MODEL`, implicit `qwen2.5:3b`;
+- OpenAI Responses API pentru extragere LLM structurata;
+- model configurabil prin variabila `OPENAI_MODEL`, implicit `gpt-5.4-mini`;
 - logica dedicata pentru tipuri de documente precum RCA, ITP, rovinieta si facturi.
 
 Infrastructura:
 
 - Docker Compose;
 - Traefik v3 ca API Gateway;
-- volume Docker pentru persistenta bazelor de date, stocare documente si Ollama;
+- volume Docker pentru persistenta bazelor de date si stocare documente;
 - retea Docker comuna `fleet-net`.
 
 ## 4. Structura proiectului

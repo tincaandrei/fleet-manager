@@ -3,6 +3,7 @@ package com.fleet.document.service;
 import com.fleet.document.dto.ParserResultRequest;
 import com.fleet.document.entity.DocumentStatus;
 import com.fleet.document.entity.ParserStatus;
+import com.fleet.document.entity.TextExtractionMethod;
 import com.fleet.document.entity.VehicleDocument;
 import com.fleet.document.repository.VehicleDocumentRepository;
 import com.fleet.document.service.event.DocumentUploadedForParsingEvent;
@@ -52,7 +53,9 @@ public class DocumentParsingJobListener {
                     null,
                     null,
                     null,
-                    "document-service-ollama-parser",
+                    "document-service-openai-parser",
+                    null,
+                    null,
                     null,
                     null,
                     List.of("Automatic parsing failed. The document can be reviewed manually."),
@@ -63,12 +66,16 @@ public class DocumentParsingJobListener {
 
         parserResultService.applyParserResult(document, parserResult);
         documentRepository.save(document);
-        createUploaderNotification(document);
+        createUploaderNotification(document, parserResult);
     }
 
-    private void createUploaderNotification(VehicleDocument document) {
+    private void createUploaderNotification(VehicleDocument document, ParserResultRequest parserResult) {
         if (document.getStatus() == DocumentStatus.NEEDS_REVIEW) {
-            notificationService.notifyParsingCompleted(document.getUploadedByUserId(), document.getId());
+            notificationService.notifyParsingCompleted(
+                    document.getUploadedByUserId(),
+                    document.getId(),
+                    parserResult.extractionMethod() == TextExtractionMethod.OCR
+            );
         } else if (document.getStatus() == DocumentStatus.PARSING_FAILED) {
             notificationService.notifyParsingFailed(document.getUploadedByUserId(), document.getId());
         }

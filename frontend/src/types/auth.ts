@@ -37,6 +37,8 @@ export interface UserProfile {
   role: Role;
   businessId: number | null;
   businessName: string | null;
+  profileImageUrl: string | null;
+  profileImageOriginalFileName: string | null;
 }
 
 // ── Business ──────────────────────────────────────────────────────────────────
@@ -73,6 +75,8 @@ export interface BusinessUser {
   role: 'BUSINESS_ADMIN' | 'EMPLOYEE';
   businessId: number;
   businessName: string | null;
+  profileImageUrl?: string | null;
+  profileImageOriginalFileName?: string | null;
 }
 
 export interface CreateBusinessUserRequest {

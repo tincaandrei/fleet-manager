@@ -27,6 +27,20 @@ export const getMe = () =>
 export const updateMe = (data: UpdateUserRequest) =>
   api.put<UserProfile>('/api/auth/users/me', data);
 
+export const uploadMyProfileImage = (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return api.post<UserProfile>('/api/auth/users/me/profile-image', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+};
+
+export const getProfileImage = (imageUrl: string) =>
+  api.get<Blob>(imageUrl, { responseType: 'blob' });
+
+export const deleteMyProfileImage = () =>
+  api.delete<UserProfile>('/api/auth/users/me/profile-image');
+
 export const updateUser = (userId: number, data: UpdateUserRequest) =>
   api.put<UserProfile>(`/api/auth/users/${userId}`, data);
 

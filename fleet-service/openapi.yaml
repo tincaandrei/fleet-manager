@@ -32,12 +32,6 @@ paths:
           format: int64
         example: 1
       responses:
-        "404":
-          description: Vehicle was not found
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/VehicleResponse"
         "200":
           description: Vehicle returned
           content:
@@ -61,6 +55,12 @@ paths:
                 currentMileage: 25000
                 createdAt: 2026-05-04T11:30:00Z
                 updatedAt: 2026-05-04T11:45:00Z
+        "404":
+          description: Vehicle was not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
         "403":
           description: Role or assignment does not allow reading this vehicle
           content:
@@ -278,7 +278,39 @@ paths:
         schema:
           type: string
         example: B-123-ABC
+      - name: businessId
+        in: query
+        description: Filter by business id. SUPERADMIN only.
+        required: false
+        schema:
+          type: integer
+          format: int64
+        example: 1
       responses:
+        "400":
+          description: Invalid filter value
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VehicleResponse"
+        "401":
+          description: JWT token is missing or invalid
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VehicleResponse"
+        "403":
+          description: Role is not allowed to list vehicles
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VehicleResponse"
         "200":
           description: Vehicles returned
           content:
@@ -304,30 +336,6 @@ paths:
                 currentMileage: 25000
                 createdAt: 2026-05-04T11:30:00Z
                 updatedAt: 2026-05-04T11:45:00Z
-        "400":
-          description: Invalid filter value
-          content:
-            '*/*':
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/VehicleResponse"
-        "401":
-          description: JWT token is missing or invalid
-          content:
-            '*/*':
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/VehicleResponse"
-        "403":
-          description: Role is not allowed to list vehicles
-          content:
-            '*/*':
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/VehicleResponse"
       security:
       - bearerAuth: []
     post:
@@ -372,6 +380,12 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/VehicleResponse"
+        "401":
+          description: JWT token is missing or invalid
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
         "201":
           description: Vehicle created
           content:
@@ -395,14 +409,120 @@ paths:
                 currentMileage: 25000
                 createdAt: 2026-05-04T11:30:00Z
                 updatedAt: 2026-05-04T11:45:00Z
+        "400":
+          description: Validation failed or invalid enum value
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+      security:
+      - bearerAuth: []
+  /vehicles/{id}/image:
+    get:
+      tags:
+      - Vehicles
+      summary: Download vehicle image
+      description: Streams the vehicle display image. Employee/User roles can access
+        only images for assigned vehicles.
+      operationId: image
+      parameters:
+      - name: id
+        in: path
+        description: Vehicle id.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Vehicles
+      summary: Upload vehicle image
+      description: "Uploads or replaces the display image for a vehicle. Accepts JPG,\
+        \ PNG, or WebP up to 5 MB. Requires `ADMIN` or `FLEET_MANAGER`."
+      operationId: uploadImage
+      parameters:
+      - name: id
+        in: path
+        description: Vehicle id.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              required:
+              - file
+              type: object
+              properties:
+                file:
+                  type: string
+                  description: Image file to upload.
+                  format: binary
+      responses:
+        "403":
+          description: Role is not allowed to update vehicles
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "404":
+          description: Vehicle was not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "200":
+          description: Vehicle image saved
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "400":
+          description: Invalid image
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
         "401":
           description: JWT token is missing or invalid
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/VehicleResponse"
-        "400":
-          description: Validation failed or invalid enum value
+      security:
+      - bearerAuth: []
+    delete:
+      tags:
+      - Vehicles
+      summary: Delete vehicle image
+      description: Removes the display image from a vehicle. Requires `ADMIN` or `FLEET_MANAGER`.
+      operationId: deleteImage
+      parameters:
+      - name: id
+        in: path
+        description: Vehicle id.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      responses:
+        "200":
+          description: OK
           content:
             '*/*':
               schema:
@@ -527,6 +647,18 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/VehicleResponse"
+        "401":
+          description: JWT token is missing or invalid
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
+        "400":
+          description: Validation failed
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleResponse"
         "200":
           description: Vehicle assignment changed
           content:
@@ -550,18 +682,6 @@ paths:
                 currentMileage: 25000
                 createdAt: 2026-05-04T11:30:00Z
                 updatedAt: 2026-05-04T11:45:00Z
-        "401":
-          description: JWT token is missing or invalid
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/VehicleResponse"
-        "400":
-          description: Validation failed
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/VehicleResponse"
       security:
       - bearerAuth: []
   /internal/vehicles/{id}/exists:
@@ -582,6 +702,12 @@ paths:
           format: int64
         example: 1
       responses:
+        "403":
+          description: Role is not allowed to use internal vehicle lookups
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleExistsResponse"
         "200":
           description: Existence result returned
           content:
@@ -591,12 +717,6 @@ paths:
               example:
                 id: 1
                 exists: true
-        "403":
-          description: Role is not allowed to use internal vehicle lookups
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/VehicleExistsResponse"
         "401":
           description: JWT token is missing or invalid
           content:
@@ -624,20 +744,6 @@ paths:
           format: int64
         example: 1
       responses:
-        "200":
-          description: Basic vehicle info returned
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/VehicleBasicInfoResponse"
-              example:
-                id: 1
-                licensePlate: B-123-ABC
-                brand: Toyota
-                model: Corolla
-                status: ACTIVE
-                assignedUserId: 12
-                assignedDriverName: Alex Ionescu
         "404":
           description: Vehicle was not found
           content:
@@ -656,6 +762,20 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/VehicleBasicInfoResponse"
+        "200":
+          description: Basic vehicle info returned
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/VehicleBasicInfoResponse"
+              example:
+                id: 1
+                licensePlate: B-123-ABC
+                brand: Toyota
+                model: Corolla
+                status: ACTIVE
+                assignedUserId: 12
+                assignedDriverName: Alex Ionescu
       security:
       - bearerAuth: []
   /internal/vehicles/active:
@@ -666,17 +786,16 @@ paths:
       description: "Internal lookup that returns compact records for vehicles with\
         \ `ACTIVE` status. Requires `ADMIN`, `FLEET_MANAGER`, or `AUDITOR`."
       operationId: activeVehicles
+      parameters:
+      - name: businessId
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
       responses:
         "403":
           description: Role is not allowed to use internal vehicle lookups
-          content:
-            '*/*':
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/VehicleBasicInfoResponse"
-        "401":
-          description: JWT token is missing or invalid
           content:
             '*/*':
               schema:
@@ -699,6 +818,14 @@ paths:
                 status: ACTIVE
                 assignedUserId: 12
                 assignedDriverName: Alex Ionescu
+        "401":
+          description: JWT token is missing or invalid
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VehicleBasicInfoResponse"
       security:
       - bearerAuth: []
 components:
@@ -710,6 +837,11 @@ components:
       - model
       type: object
       properties:
+        businessId:
+          type: integer
+          description: Business id. Required only for SUPERADMIN-created vehicles.
+          format: int64
+          example: 1
         licensePlate:
           maxLength: 32
           minLength: 0
@@ -813,6 +945,9 @@ components:
           description: Vehicle id.
           format: int64
           example: 1
+        businessId:
+          type: integer
+          format: int64
         licensePlate:
           type: string
           description: Unique vehicle license plate.
@@ -892,6 +1027,14 @@ components:
           description: Current odometer value.
           format: int64
           example: 25000
+        imageUrl:
+          type: string
+          description: Authenticated endpoint for the vehicle image when present.
+          example: /api/fleet/vehicles/1/image
+        imageOriginalFileName:
+          type: string
+          description: Original uploaded vehicle image filename.
+          example: logan.jpg
         createdAt:
           type: string
           description: Creation timestamp.
@@ -949,6 +1092,9 @@ components:
           description: Vehicle id that was checked.
           format: int64
           example: 1
+        businessId:
+          type: integer
+          format: int64
         exists:
           type: boolean
           description: Whether the vehicle exists.
@@ -962,6 +1108,9 @@ components:
           description: Vehicle id.
           format: int64
           example: 1
+        businessId:
+          type: integer
+          format: int64
         licensePlate:
           type: string
           description: Unique vehicle license plate.

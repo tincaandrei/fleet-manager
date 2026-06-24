@@ -26,6 +26,7 @@ export type ParserStatus =
   | 'FAILED'
   | 'PARTIAL'
   | 'PENDING';
+export type TextExtractionMethod = 'PDFBOX' | 'OCR';
 
 // ── Extraction draft (unapproved parser output) ───────────────────────────────
 
@@ -37,6 +38,7 @@ export interface DocumentExtractionResponse {
   warnings: string[] | null;
   parserName: string | null;
   parserVersion: string | null;
+  extractionMethod?: TextExtractionMethod | null;
   parserStatus: ParserStatus;
   errorCode: string | null;
   errorMessage: string | null;

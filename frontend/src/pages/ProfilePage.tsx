@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { getMe, updateMe } from '../api/authApi';
+import { deleteMyProfileImage, getMe, updateMe, uploadMyProfileImage } from '../api/authApi';
 import type { UserProfile } from '../types/auth';
 import { showToast } from '../utils/toast';
 import { getApiErrorMessage } from '../utils/apiError';
@@ -7,6 +7,7 @@ import PageShell from '../components/ui/PageShell';
 import PageHeader from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Button';
 import DataState from '../components/ui/DataState';
+import UserAvatar from '../components/UserAvatar';
 
 interface ProfileForm {
   email: string;
@@ -26,7 +27,10 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [imageSaving, setImageSaving] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isImageOpen, setIsImageOpen] = useState(false);
 
   useEffect(() => {
     getMe()
@@ -65,6 +69,13 @@ export default function ProfilePage() {
     setError(null);
   };
 
+  const closeImageModal = () => {
+    if (imageSaving) return;
+    setIsImageOpen(false);
+    setImageFile(null);
+    setError(null);
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
@@ -99,6 +110,55 @@ export default function ProfilePage() {
     }
   };
 
+  const notifyProfileImageUpdated = () => {
+    window.dispatchEvent(new Event('profile-image-updated'));
+  };
+
+  const handleImageUpload = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    setSuccess(null);
+
+    if (!imageFile) {
+      setError('Choose an image first.');
+      return;
+    }
+
+    setImageSaving(true);
+    try {
+      const res = await uploadMyProfileImage(imageFile);
+      setProfile(res.data);
+      setImageFile(null);
+      setIsImageOpen(false);
+      setSuccess('Profile picture updated.');
+      notifyProfileImageUpdated();
+      showToast({ type: 'success', message: 'Profile picture updated.' });
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Failed to update profile picture.'));
+    } finally {
+      setImageSaving(false);
+    }
+  };
+
+  const handleImageDelete = async () => {
+    setError(null);
+    setSuccess(null);
+    setImageSaving(true);
+    try {
+      const res = await deleteMyProfileImage();
+      setProfile(res.data);
+      setImageFile(null);
+      setIsImageOpen(false);
+      setSuccess('Profile picture removed.');
+      notifyProfileImageUpdated();
+      showToast({ type: 'success', message: 'Profile picture removed.' });
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, 'Failed to remove profile picture.'));
+    } finally {
+      setImageSaving(false);
+    }
+  };
+
   return (
     <PageShell>
         <PageHeader
@@ -106,10 +166,34 @@ export default function ProfilePage() {
           description="View your account and organization assignment."
           actions={profile && <Button onClick={openEdit}>Edit</Button>}
         />
-        {error && !isEditOpen && <DataState type="error">{error}</DataState>}
+        {error && !isEditOpen && !isImageOpen && <DataState type="error">{error}</DataState>}
         {success && <DataState type="success">{success}</DataState>}
         {profile && (
           <div className="profile-layout">
+            <section className="profile-card">
+              <button
+                type="button"
+                className="profile-image-trigger"
+                onClick={() => {
+                  setError(null);
+                  setSuccess(null);
+                  setIsImageOpen(true);
+                }}
+                aria-label="Open profile picture"
+              >
+                <UserAvatar
+                  username={profile.username}
+                  imageUrl={profile.profileImageUrl}
+                  className="profile-avatar"
+                />
+              </button>
+              <div className="profile-card-copy">
+                <h2>{profile.username}</h2>
+                <span>{profile.role}</span>
+                {profile.businessName && <p>{profile.businessName}</p>}
+              </div>
+            </section>
+
             <table className="detail-table">
               <tbody>
                 <tr><th>Username</th><td>{profile.username}</td></tr>
@@ -172,6 +256,59 @@ export default function ProfilePage() {
                       </button>
                     </div>
                   </form>
+                </section>
+              </div>
+            )}
+
+            {isImageOpen && (
+              <div className="modal-backdrop" role="presentation" onMouseDown={closeImageModal}>
+                <section
+                  className="image-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="profile-image-title"
+                  onMouseDown={(event) => event.stopPropagation()}
+                >
+                  <div className="modal-header">
+                    <h2 id="profile-image-title">Profile Picture</h2>
+                    <button type="button" className="modal-close" onClick={closeImageModal} aria-label="Close">
+                      x
+                    </button>
+                  </div>
+                  <div className="image-modal-body">
+                    <UserAvatar
+                      username={profile.username}
+                      imageUrl={profile.profileImageUrl}
+                      className="image-modal-avatar"
+                    />
+                    <form className="profile-image-form" onSubmit={handleImageUpload}>
+                      <label className="profile-image-picker">
+                        Change picture
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          onChange={(event) => setImageFile(event.target.files?.[0] ?? null)}
+                        />
+                      </label>
+                      {imageFile && <span className="profile-image-file-name">{imageFile.name}</span>}
+                      {error && <p className="error modal-message">{error}</p>}
+                      <div className="profile-image-actions">
+                        <Button type="submit" disabled={imageSaving || !imageFile}>
+                          {imageSaving ? 'Uploading...' : 'Upload'}
+                        </Button>
+                        {profile.profileImageUrl && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={imageSaving}
+                            onClick={handleImageDelete}
+                          >
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                    </form>
+                  </div>
                 </section>
               </div>
             )}

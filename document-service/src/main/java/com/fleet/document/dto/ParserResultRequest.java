@@ -2,6 +2,7 @@ package com.fleet.document.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fleet.document.entity.ParserStatus;
+import com.fleet.document.entity.TextExtractionMethod;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 
@@ -25,6 +26,8 @@ public record ParserResultRequest(
         BigDecimal confidence,
         String parserName,
         String parserVersion,
+        TextExtractionMethod extractionMethod,
+        LlmUsageDto llmUsage,
         Map<String, Object> extractedData,
         List<String> warnings,
         String errorCode,

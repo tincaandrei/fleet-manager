@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { VehicleRequest } from '../types/vehicle';
+import type { Vehicle, VehicleRequest } from '../types/vehicle';
+import VehicleImage from './VehicleImage';
 
 const STATUSES = ['ACTIVE', 'IN_SERVICE', 'INACTIVE', 'SOLD', 'DECOMMISSIONED'];
 const TYPES = ['CAR', 'VAN', 'TRUCK', 'MOTORCYCLE', 'OTHER'];
@@ -12,9 +13,21 @@ interface Props {
   loading: boolean;
   error: string | null;
   submitLabel: string;
+  imageFile?: File | null;
+  currentVehicle?: Vehicle | null;
+  onImageFileChange?: (file: File | null) => void;
 }
 
-export default function VehicleForm({ initial, onSubmit, loading, error, submitLabel }: Props) {
+export default function VehicleForm({
+  initial,
+  onSubmit,
+  loading,
+  error,
+  submitLabel,
+  imageFile,
+  currentVehicle,
+  onImageFileChange,
+}: Props) {
   const [form, setForm] = useState<VehicleRequest>({
     licensePlate: initial?.licensePlate ?? '',
     vin: initial?.vin ?? '',
@@ -112,6 +125,25 @@ export default function VehicleForm({ initial, onSubmit, loading, error, submitL
         Assigned User ID
         <input type="number" value={form.assignedUserId ?? ''} onChange={(e) => handleChange('assignedUserId', e.target.value)} />
       </label>
+
+      {onImageFileChange && (
+        <div className="vehicle-image-field full-width">
+          {currentVehicle?.imageUrl && (
+            <VehicleImage vehicle={currentVehicle} className="vehicle-form-image" />
+          )}
+          <label>
+            Vehicle image
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(e) => onImageFileChange(e.target.files?.[0] ?? null)}
+            />
+          </label>
+          {imageFile && (
+            <span className="vehicle-image-file-name">{imageFile.name}</span>
+          )}
+        </div>
+      )}
 
       <div className="full-width">
         <button type="submit" disabled={loading}>{loading ? 'Saving...' : submitLabel}</button>

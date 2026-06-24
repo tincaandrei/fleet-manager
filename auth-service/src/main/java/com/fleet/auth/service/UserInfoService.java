@@ -20,6 +20,7 @@ import com.fleet.auth.repository.BusinessRepository;
 import com.fleet.auth.repository.RoleEntityRepository;
 import com.fleet.auth.repository.UserDataRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -29,7 +30,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.file.Path;
 import java.util.Optional;
 import java.util.List;
 
@@ -39,6 +42,7 @@ public class UserInfoService implements UserDetailsService {
 
     private final BusinessRepository businessRepository;
     private final CredentialRepository credentialRepository;
+    private final ProfileImageStorageService profileImageStorageService;
     private final RoleEntityRepository roleEntityRepository;
     private final UserDataRepository userDataRepository;
     private final PasswordEncoder passwordEncoder;
@@ -225,6 +229,58 @@ public class UserInfoService implements UserDetailsService {
     }
 
     @Transactional
+    public MeResponse uploadCurrentUserProfileImage(MultipartFile file, Authentication authentication) {
+        UserData userData = userDataRepository.findByCredentialUsername(authentication.getName())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + authentication.getName()));
+        StoredProfileImage image = profileImageStorageService.save(file);
+        profileImageStorageService.deleteQuietly(userData.getProfileImageStoragePath());
+        userData.setProfileImageStoragePath(image.storagePath());
+        userData.setProfileImageOriginalFileName(image.originalFileName());
+        userData.setProfileImageContentType(image.contentType());
+        userData.setProfileImageFileSize(image.fileSize());
+        return toMeResponse(userDataRepository.save(userData));
+    }
+
+    @Transactional
+    public MeResponse deleteCurrentUserProfileImage(Authentication authentication) {
+        UserData userData = userDataRepository.findByCredentialUsername(authentication.getName())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + authentication.getName()));
+        profileImageStorageService.deleteQuietly(userData.getProfileImageStoragePath());
+        userData.setProfileImageStoragePath(null);
+        userData.setProfileImageOriginalFileName(null);
+        userData.setProfileImageContentType(null);
+        userData.setProfileImageFileSize(null);
+        return toMeResponse(userDataRepository.save(userData));
+    }
+
+    @Transactional(readOnly = true)
+    public ProfileImageResource loadCurrentUserProfileImage(Authentication authentication) {
+        UserData userData = userDataRepository.findByCredentialUsername(authentication.getName())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + authentication.getName()));
+        return loadProfileImage(userData);
+    }
+
+    @Transactional(readOnly = true)
+    public ProfileImageResource loadUserProfileImage(Long userId, Authentication authentication) {
+        UserData userData = getUserData(userId);
+        if (!userData.getUserId().equals(currentUserId(authentication))) {
+            requireCanManageUser(userData, authentication);
+        }
+        return loadProfileImage(userData);
+    }
+
+    private ProfileImageResource loadProfileImage(UserData userData) {
+        if (!StringUtils.hasText(userData.getProfileImageStoragePath())) {
+            throw new ResourceNotFoundException("Profile image not found");
+        }
+        return new ProfileImageResource(
+                profileImageStorageService.load(userData.getProfileImageStoragePath()),
+                userData.getProfileImageContentType(),
+                userData.getProfileImageOriginalFileName()
+        );
+    }
+
+    @Transactional
     public MeResponse updateUser(Long userId, UpdateUserRequest request, Authentication authentication) {
         requireSuperadmin(authentication);
         UserData userData = getUserData(userId);
@@ -331,6 +387,17 @@ public class UserInfoService implements UserDetailsService {
         }
     }
 
+    private void requireCanManageUser(UserData userData, Authentication authentication) {
+        if (hasRole(authentication, Role.SUPERADMIN)) {
+            return;
+        }
+        Business business = userData.getBusiness();
+        if (business == null || !hasRole(authentication, Role.BUSINESS_ADMIN)
+                || !business.getId().equals(currentBusinessId(authentication))) {
+            throw new AccessDeniedException("Access denied");
+        }
+    }
+
     private boolean hasRole(Authentication authentication, Role role) {
         if (authentication == null) {
             return false;
@@ -352,6 +419,18 @@ public class UserInfoService implements UserDetailsService {
                 .orElse(null);
     }
 
+    private Long currentUserId(Authentication authentication) {
+        if (authentication == null) {
+            return null;
+        }
+        if (authentication.getPrincipal() instanceof CredentialDetails details) {
+            return details.getUserId();
+        }
+        return userDataRepository.findByCredentialUsername(authentication.getName())
+                .map(UserData::getUserId)
+                .orElse(null);
+    }
+
     private Business getBusinessEntity(Long businessId) {
         return businessRepository.findById(businessId)
                 .orElseThrow(() -> new ResourceNotFoundException("Organization not found: " + businessId));
@@ -370,6 +449,11 @@ public class UserInfoService implements UserDetailsService {
 
     private MeResponse toMeResponse(UserData userData) {
         Business business = userData.getBusiness();
+        String profileImageUrl = null;
+        if (StringUtils.hasText(userData.getProfileImageStoragePath())) {
+            String imageVersion = Path.of(userData.getProfileImageStoragePath()).getFileName().toString();
+            profileImageUrl = "/api/auth/users/" + userData.getUserId() + "/profile-image?v=" + imageVersion;
+        }
         return new MeResponse(
                 userData.getUserId(),
                 userData.getCredential().getUsername(),
@@ -378,8 +462,13 @@ public class UserInfoService implements UserDetailsService {
                 userData.getAddress(),
                 userData.getCredential().getRole().getRoleName().canonical(),
                 business == null ? null : business.getId(),
-                business == null ? null : business.getName()
+                business == null ? null : business.getName(),
+                profileImageUrl,
+                userData.getProfileImageOriginalFileName()
         );
+    }
+
+    public record ProfileImageResource(Resource resource, String contentType, String originalFileName) {
     }
 
     private BusinessResponse toBusinessResponse(Business business) {

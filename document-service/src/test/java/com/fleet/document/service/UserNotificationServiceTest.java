@@ -55,6 +55,21 @@ class UserNotificationServiceTest {
     }
 
     @Test
+    void createsOcrParsingCompletedNotificationForUploader() {
+        when(notificationRepository.save(any(UserNotification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        UUID documentId = UUID.randomUUID();
+
+        notificationService.notifyParsingCompleted(10L, documentId, true);
+
+        verify(notificationRepository).save(org.mockito.ArgumentMatchers.argThat(notification ->
+                notification.getUserId().equals(10L)
+                        && notification.getDocumentId().equals(documentId)
+                        && notification.getType() == NotificationType.DOCUMENT_PARSING_COMPLETED
+                        && notification.getMessage().contains("OCR was used")
+        ));
+    }
+
+    @Test
     void listsOnlyCurrentUserNotifications() {
         UserNotification notification = notification(UUID.randomUUID(), 10L, false);
         when(notificationRepository.findByUserIdOrderByCreatedAtDesc(10L)).thenReturn(List.of(notification));

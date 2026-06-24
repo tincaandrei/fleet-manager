@@ -6,6 +6,7 @@ import type { BusinessUser, CreateBusinessUserRequest } from '../types/auth';
 import PageShell from '../components/ui/PageShell';
 import DataState from '../components/ui/DataState';
 import ResponsiveTable from '../components/ui/ResponsiveTable';
+import { Button } from '../components/ui/Button';
 
 function apiMessage(err: unknown, fallback: string): string {
   const e = err as { response?: { data?: { message?: string } } };
@@ -180,6 +181,7 @@ export default function BusinessUsersPage() {
   const { isSuperAdmin, isBusinessAdmin, businessId: myBusinessId } = useAuth();
 
   const [users, setUsers] = useState<BusinessUser[]>([]);
+  const [activeTab, setActiveTab] = useState<'view' | 'add'>('view');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -229,46 +231,65 @@ export default function BusinessUsersPage() {
 
         <p className="info-note">Organization ID: {businessId}</p>
 
+        <nav className="mini-tabs" aria-label="Users sections">
+          <Button
+            variant={activeTab === 'view' ? 'primary' : 'secondary'}
+            onClick={() => setActiveTab('view')}
+          >
+            View users
+          </Button>
+          <Button
+            variant={activeTab === 'add' ? 'primary' : 'secondary'}
+            onClick={() => setActiveTab('add')}
+          >
+            Add user
+          </Button>
+        </nav>
+
         {loading && <DataState type="loading">Loading users...</DataState>}
         {!loading && error && <DataState type="error">{error}</DataState>}
 
         {!loading && !error && (
           <>
-            {users.length === 0 ? (
-              <DataState>No users in this organization yet.</DataState>
-            ) : (
-              <ResponsiveTable ariaLabel="Organization users">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Username</th>
-                    <th>Email</th>
-                    <th>Phone</th>
-                    <th>Role</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((u) => (
-                    <tr key={u.userId}>
-                      <td data-label="ID">{u.userId}</td>
-                      <td data-label="Username">{u.username}</td>
-                      <td data-label="Email">{u.email}</td>
-                      <td data-label="Phone">{u.phone || '-'}</td>
-                      <td data-label="Role">
-                        <RoleCell
-                          user={u}
-                          businessId={businessId}
-                          canChangeRole={canManage}
-                          onUpdated={handleUpdated}
-                        />
-                      </td>
+            {activeTab === 'view' && (
+              users.length === 0 ? (
+                <DataState>No users in this organization yet.</DataState>
+              ) : (
+                <ResponsiveTable ariaLabel="Organization users">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Username</th>
+                      <th>Email</th>
+                      <th>Phone</th>
+                      <th>Role</th>
                     </tr>
-                  ))}
-                </tbody>
-              </ResponsiveTable>
+                  </thead>
+                  <tbody>
+                    {users.map((u) => (
+                      <tr key={u.userId}>
+                        <td data-label="ID">{u.userId}</td>
+                        <td data-label="Username">{u.username}</td>
+                        <td data-label="Email">{u.email}</td>
+                        <td data-label="Phone">{u.phone || '-'}</td>
+                        <td data-label="Role">
+                          <RoleCell
+                            user={u}
+                            businessId={businessId}
+                            canChangeRole={canManage}
+                            onUpdated={handleUpdated}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </ResponsiveTable>
+              )
             )}
 
-            <AddUserForm businessId={businessId} onCreated={handleCreated} />
+            {activeTab === 'add' && (
+              <AddUserForm businessId={businessId} onCreated={handleCreated} />
+            )}
           </>
         )}
     </PageShell>

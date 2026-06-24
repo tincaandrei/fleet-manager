@@ -22,7 +22,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties({JwtProperties.class, BootstrapAdminProperties.class})
+@EnableConfigurationProperties({JwtProperties.class, BootstrapAdminProperties.class, ProfileImageStorageProperties.class})
 public class SecurityConfig {
 
     @Bean

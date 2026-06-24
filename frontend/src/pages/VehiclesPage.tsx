@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { deleteVehicle, getVehicles } from '../api/vehicleApi';
 import type { Vehicle, VehicleFilters } from '../types/vehicle';
@@ -7,51 +7,133 @@ import PageShell from '../components/ui/PageShell';
 import PageHeader from '../components/ui/PageHeader';
 import { Button, ButtonLink } from '../components/ui/Button';
 import DataState from '../components/ui/DataState';
-import ResponsiveTable from '../components/ui/ResponsiveTable';
 import StatusBadge from '../components/ui/StatusBadge';
+import VehicleImage from '../components/VehicleImage';
 import { getApiErrorMessage } from '../utils/apiError';
 
-const STATUSES   = ['ACTIVE', 'IN_SERVICE', 'INACTIVE', 'SOLD', 'DECOMMISSIONED'];
-const TYPES      = ['CAR', 'VAN', 'TRUCK', 'MOTORCYCLE', 'OTHER'];
-const FUELS      = ['DIESEL', 'PETROL', 'HYBRID', 'ELECTRIC', 'LPG', 'OTHER'];
+const STATUSES = ['ACTIVE', 'IN_SERVICE', 'INACTIVE', 'SOLD', 'DECOMMISSIONED'];
+const TYPES = ['CAR', 'VAN', 'TRUCK', 'MOTORCYCLE', 'OTHER'];
+const FUELS = ['DIESEL', 'PETROL', 'HYBRID', 'ELECTRIC', 'LPG', 'OTHER'];
 const OWNERSHIPS = ['OWNED', 'LEASED', 'RENTED', 'OTHER'];
+const PAGE_SIZE = 6;
+
+type VehicleFilterDraft = {
+  licensePlate: string;
+  department: string;
+  businessId: string;
+  status: string[];
+  vehicleType: string[];
+  fuelType: string[];
+  ownershipType: string[];
+};
+
+const emptyFilterDraft: VehicleFilterDraft = {
+  licensePlate: '',
+  department: '',
+  businessId: '',
+  status: [],
+  vehicleType: [],
+  fuelType: [],
+  ownershipType: [],
+};
+
+function hasText(value: string, query: string) {
+  return value.toLowerCase().includes(query.trim().toLowerCase());
+}
+
+function applyVehicleFilters(vehicles: Vehicle[], draft: VehicleFilterDraft) {
+  const licensePlate = draft.licensePlate.trim();
+  const department = draft.department.trim();
+  const businessId = draft.businessId.trim();
+
+  return vehicles.filter((vehicle) => {
+    if (licensePlate && !hasText(vehicle.licensePlate, licensePlate)) return false;
+    if (department && !hasText(vehicle.department ?? '', department)) return false;
+    if (businessId && vehicle.businessId !== Number(businessId)) return false;
+    if (draft.status.length > 0 && !draft.status.includes(vehicle.status)) return false;
+    if (draft.vehicleType.length > 0 && !draft.vehicleType.includes(vehicle.vehicleType)) return false;
+    if (draft.fuelType.length > 0 && !draft.fuelType.includes(vehicle.fuelType)) return false;
+    if (draft.ownershipType.length > 0 && !draft.ownershipType.includes(vehicle.ownershipType)) return false;
+    return true;
+  });
+}
+
+function filterCount(draft: VehicleFilterDraft) {
+  return [
+    draft.licensePlate.trim(),
+    draft.department.trim(),
+    draft.businessId.trim(),
+  ].filter(Boolean).length
+    + draft.status.length
+    + draft.vehicleType.length
+    + draft.fuelType.length
+    + draft.ownershipType.length;
+}
 
 export default function VehiclesPage() {
-  const { isAdmin, isSuperAdmin, role, businessId } = useAuth();
+  const { isAdmin, isSuperAdmin, role } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [filters, setFilters]   = useState<VehicleFilters>({});
-  const [loading, setLoading]   = useState(true);
-  const [error, setError]       = useState<string | null>(null);
+  const [filterDraft, setFilterDraft] = useState<VehicleFilterDraft>(emptyFilterDraft);
+  const [appliedFilters, setAppliedFilters] = useState<VehicleFilterDraft>(emptyFilterDraft);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
-  /**
-   * Build the initial filter set based on role:
-   * - EMPLOYEE: backend already scopes by assignedUserId, no extra filter needed
-   * - BUSINESS_ADMIN: backend scopes by organization, no extra filter needed
-   * - SUPERADMIN: no default scope, but may manually filter by businessId
-   */
-  const load = (f: VehicleFilters = filters) => {
+  const load = (draft: VehicleFilterDraft = appliedFilters) => {
     setLoading(true);
     setError(null);
-    getVehicles(f)
-      .then((res) => setVehicles(res.data))
+    const apiFilters: VehicleFilters = {};
+    if (isSuperAdmin && draft.businessId.trim()) {
+      apiFilters.businessId = Number(draft.businessId);
+    }
+    getVehicles(apiFilters)
+      .then((res) => {
+        setVehicles(applyVehicleFilters(res.data, draft));
+        setPage(1);
+      })
       .catch((err: unknown) => setError(getApiErrorMessage(err, 'Failed to load vehicles.')))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => load({}), 0);
+    const timeoutId = window.setTimeout(() => load(emptyFilterDraft), 0);
     return () => window.clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const setFilter =
-    (field: keyof VehicleFilters) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setFilters((prev) => ({ ...prev, [field]: e.target.value || undefined }));
+  const setTextFilter =
+    (field: 'licensePlate' | 'department' | 'businessId') =>
+    (e: React.ChangeEvent<HTMLInputElement>) =>
+      setFilterDraft((prev) => ({ ...prev, [field]: e.target.value }));
+
+  const toggleFilterValue = (
+    field: 'status' | 'vehicleType' | 'fuelType' | 'ownershipType',
+    value: string,
+  ) => {
+    setFilterDraft((prev) => {
+      const selected = prev[field];
+      return {
+        ...prev,
+        [field]: selected.includes(value)
+          ? selected.filter((item) => item !== value)
+          : [...selected, value],
+      };
+    });
+  };
 
   const handleFilter = (e: React.FormEvent) => {
     e.preventDefault();
-    load(filters);
+    setAppliedFilters(filterDraft);
+    load(filterDraft);
+    setFiltersOpen(false);
+  };
+
+  const handleClearFilters = () => {
+    setFilterDraft(emptyFilterDraft);
+    setAppliedFilters(emptyFilterDraft);
+    load(emptyFilterDraft);
+    setFiltersOpen(false);
   };
 
   const handleDelete = async (id: number) => {
@@ -67,6 +149,20 @@ export default function VehiclesPage() {
   const activeCount = vehicles.filter((vehicle) => vehicle.status === 'ACTIVE').length;
   const serviceCount = vehicles.filter((vehicle) => vehicle.status === 'IN_SERVICE').length;
   const inactiveCount = vehicles.filter((vehicle) => vehicle.status === 'INACTIVE').length;
+  const pageCount = Math.max(1, Math.ceil(vehicles.length / PAGE_SIZE));
+  const pageStart = (page - 1) * PAGE_SIZE;
+  const selectedFilterCount = filterCount(filterDraft);
+  const appliedFilterCount = filterCount(appliedFilters);
+  const paginatedVehicles = useMemo(
+    () => vehicles.slice(pageStart, pageStart + PAGE_SIZE),
+    [vehicles, pageStart],
+  );
+
+  useEffect(() => {
+    if (page > pageCount) {
+      setPage(pageCount);
+    }
+  }, [page, pageCount]);
 
   return (
     <PageShell>
@@ -99,139 +195,226 @@ export default function VehiclesPage() {
         </div>
       </section>
 
-        {/* ── Filters ── */}
-      <form onSubmit={handleFilter} className="filters filters-modern">
-          <input
-            placeholder="License plate"
-            value={filters.licensePlate ?? ''}
-            onChange={setFilter('licensePlate')}
-          />
-          <select value={filters.status ?? ''} onChange={setFilter('status')}>
-            <option value="">All statuses</option>
-            {STATUSES.map((s) => <option key={s}>{s}</option>)}
-          </select>
-          <select value={filters.vehicleType ?? ''} onChange={setFilter('vehicleType')}>
-            <option value="">All types</option>
-            {TYPES.map((t) => <option key={t}>{t}</option>)}
-          </select>
-          <select value={filters.fuelType ?? ''} onChange={setFilter('fuelType')}>
-            <option value="">All fuels</option>
-            {FUELS.map((f) => <option key={f}>{f}</option>)}
-          </select>
-          <select value={filters.ownershipType ?? ''} onChange={setFilter('ownershipType')}>
-            <option value="">All ownerships</option>
-            {OWNERSHIPS.map((o) => <option key={o}>{o}</option>)}
-          </select>
-          <input
-            placeholder="Department"
-            value={filters.department ?? ''}
-            onChange={setFilter('department')}
-          />
-
-          {/* SUPERADMIN can filter across organizations */}
-          {isSuperAdmin && (
-            <input
-              type="number"
-              placeholder="Organization ID"
-              value={filters.businessId ?? ''}
-              onChange={(e) =>
-                setFilters((prev) => ({
-                  ...prev,
-                  businessId: e.target.value ? Number(e.target.value) : undefined,
-                }))
-              }
-            />
-          )}
-
-          <Button type="submit">Filter</Button>
+      <section className="filter-shell" aria-label="Vehicle filters">
+        <div className="filter-toolbar">
           <Button
-            variant="secondary"
-            onClick={() => {
-              setFilters({});
-              load({});
-            }}
+            variant={filtersOpen ? 'secondary' : 'primary'}
+            onClick={() => setFiltersOpen((open) => !open)}
+            aria-expanded={filtersOpen}
+            aria-controls="vehicle-filter-panel"
           >
-            Clear
+            Filters{appliedFilterCount > 0 ? ` (${appliedFilterCount})` : ''}
           </Button>
-        </form>
+          {appliedFilterCount > 0 && (
+            <Button variant="ghost" onClick={handleClearFilters}>
+              Clear
+            </Button>
+          )}
+        </div>
 
-        {/* Contextual note for EMPLOYEE */}
-        {role === 'EMPLOYEE' && (
-          <DataState type="info">Showing only vehicles assigned to your account.</DataState>
+        {filtersOpen && (
+          <form id="vehicle-filter-panel" onSubmit={handleFilter} className="filter-panel">
+            <div className="filter-search-row">
+              <label>
+                License plate
+                <input
+                  placeholder="B-101-ATL"
+                  value={filterDraft.licensePlate}
+                  onChange={setTextFilter('licensePlate')}
+                />
+              </label>
+              <label>
+                Department
+                <input
+                  placeholder="Operations"
+                  value={filterDraft.department}
+                  onChange={setTextFilter('department')}
+                />
+              </label>
+              {isSuperAdmin && (
+                <label>
+                  Organization ID
+                  <input
+                    type="number"
+                    placeholder="101"
+                    value={filterDraft.businessId}
+                    onChange={setTextFilter('businessId')}
+                  />
+                </label>
+              )}
+            </div>
+
+            <div className="filter-groups">
+              <fieldset className="filter-group">
+                <legend>Status</legend>
+                {STATUSES.map((status) => (
+                  <label key={status} className="filter-check">
+                    <input
+                      type="checkbox"
+                      checked={filterDraft.status.includes(status)}
+                      onChange={() => toggleFilterValue('status', status)}
+                    />
+                    <span>{status}</span>
+                  </label>
+                ))}
+              </fieldset>
+
+              <fieldset className="filter-group">
+                <legend>Type</legend>
+                {TYPES.map((type) => (
+                  <label key={type} className="filter-check">
+                    <input
+                      type="checkbox"
+                      checked={filterDraft.vehicleType.includes(type)}
+                      onChange={() => toggleFilterValue('vehicleType', type)}
+                    />
+                    <span>{type}</span>
+                  </label>
+                ))}
+              </fieldset>
+
+              <fieldset className="filter-group">
+                <legend>Fuel</legend>
+                {FUELS.map((fuel) => (
+                  <label key={fuel} className="filter-check">
+                    <input
+                      type="checkbox"
+                      checked={filterDraft.fuelType.includes(fuel)}
+                      onChange={() => toggleFilterValue('fuelType', fuel)}
+                    />
+                    <span>{fuel}</span>
+                  </label>
+                ))}
+              </fieldset>
+
+              <fieldset className="filter-group">
+                <legend>Ownership</legend>
+                {OWNERSHIPS.map((ownership) => (
+                  <label key={ownership} className="filter-check">
+                    <input
+                      type="checkbox"
+                      checked={filterDraft.ownershipType.includes(ownership)}
+                      onChange={() => toggleFilterValue('ownershipType', ownership)}
+                    />
+                    <span>{ownership}</span>
+                  </label>
+                ))}
+              </fieldset>
+            </div>
+
+            <div className="filter-actions">
+              <Button type="submit">Apply{selectedFilterCount > 0 ? ` (${selectedFilterCount})` : ''}</Button>
+              <Button variant="secondary" onClick={handleClearFilters}>Reset</Button>
+            </div>
+          </form>
         )}
+      </section>
 
-        {/* Contextual note for BUSINESS_ADMIN */}
-        {role === 'BUSINESS_ADMIN' && businessId != null && (
-          <DataState type="info">Showing all vehicles in your organization (ID {businessId}).</DataState>
-        )}
+      {role === 'EMPLOYEE' && (
+        <DataState type="info">Showing only vehicles assigned to your account.</DataState>
+      )}
 
-        {error && <DataState type="error">{error}</DataState>}
-        {loading && <DataState type="loading">Loading vehicles...</DataState>}
+      {error && <DataState type="error">{error}</DataState>}
+      {loading && <DataState type="loading">Loading vehicles...</DataState>}
 
-        {/* ── Table (desktop) / Card list (mobile via CSS + data-label) ── */}
-        {!loading && !error && (
-        <ResponsiveTable ariaLabel="Vehicles">
-          <thead>
-            <tr>
-              <th>License Plate</th>
-              <th>Brand / Model</th>
-              <th>Type</th>
-              <th>Fuel</th>
-              <th>Status</th>
-              <th>Department</th>
-              {isSuperAdmin && <th>Organization</th>}
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {vehicles.length === 0 && (
-              <tr>
-                <td colSpan={isSuperAdmin ? 8 : 7} className="empty">No vehicles found.</td>
-              </tr>
-            )}
-            {vehicles.map((v) => (
-              <tr key={v.id}>
-                <td data-label="License Plate">
-                  <div className="vehicle-identity">
-                    <Link to={`/vehicles/${v.id}`} className="vehicle-title-link">{v.licensePlate}</Link>
-                    <span className="vehicle-subtext">VIN {v.vin}</span>
-                  </div>
-                </td>
-                <td data-label="Brand / Model">
-                  <div className="vehicle-identity">
-                    <span>{v.brand} {v.model}</span>
-                    <span className="vehicle-subtext">{v.currentMileage.toLocaleString()} km</span>
-                  </div>
-                </td>
-                <td data-label="Type">{v.vehicleType}</td>
-                <td data-label="Fuel">{v.fuelType}</td>
-                <td data-label="Status">
-                  <StatusBadge status={v.status} />
-                </td>
-                <td data-label="Department">{v.department}</td>
-                {isSuperAdmin && (
-                  <td data-label="Organization">{v.businessId ?? '-'}</td>
-                )}
-                <td data-label="Actions" className="actions-cell">
-                  <ButtonLink to={`/vehicles/${v.id}`} size="sm" variant="secondary">View</ButtonLink>
-                  {isAdmin && (
-                    <>
-                      <ButtonLink to={`/vehicles/${v.id}/edit`} size="sm" variant="ghost">Edit</ButtonLink>
-                      <button
-                        className="btn-link-danger"
-                        type="button"
-                        onClick={() => handleDelete(v.id)}
-                      >
-                        Delete
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </ResponsiveTable>
-        )}
+      {!loading && !error && (
+        <>
+          {vehicles.length === 0 ? (
+            <DataState>No vehicles found.</DataState>
+          ) : (
+            <>
+              <div className="vehicle-card-grid" aria-label="Vehicles">
+                {paginatedVehicles.map((v) => (
+                  <article key={v.id} className="vehicle-card">
+                    <Link
+                      to={`/vehicles/${v.id}`}
+                      className="vehicle-card-media"
+                      aria-label={`Open ${v.licensePlate} details`}
+                    >
+                      <VehicleImage vehicle={v} className="vehicle-card-image" />
+                    </Link>
+
+                    <div className="vehicle-card-body">
+                      <div className="vehicle-card-heading">
+                        <div>
+                          <Link to={`/vehicles/${v.id}`} className="vehicle-card-title">
+                            {v.licensePlate}
+                          </Link>
+                          <span className="vehicle-card-subtitle">{v.brand} {v.model}</span>
+                        </div>
+                        <StatusBadge status={v.status} />
+                      </div>
+
+                      <div className="vehicle-card-chips" aria-label="Vehicle attributes">
+                        <span>{v.vehicleType}</span>
+                        <span>{v.fuelType}</span>
+                        <span>{v.ownershipType}</span>
+                      </div>
+
+                      <dl className="vehicle-card-facts">
+                        <div>
+                          <dt>Mileage</dt>
+                          <dd>{v.currentMileage.toLocaleString()} km</dd>
+                        </div>
+                        <div>
+                          <dt>Department</dt>
+                          <dd>{v.department || '-'}</dd>
+                        </div>
+                        <div>
+                          <dt>Driver</dt>
+                          <dd>{v.assignedDriverName || '-'}</dd>
+                        </div>
+                        {isSuperAdmin && (
+                          <div>
+                            <dt>Organization</dt>
+                            <dd>{v.businessId ?? '-'}</dd>
+                          </div>
+                        )}
+                      </dl>
+
+                      <div className="vehicle-card-actions">
+                        <ButtonLink to={`/vehicles/${v.id}`} size="sm" variant="secondary">View</ButtonLink>
+                        {isAdmin && (
+                          <>
+                            <ButtonLink to={`/vehicles/${v.id}/edit`} size="sm" variant="ghost">Edit</ButtonLink>
+                            <button
+                              className="btn-link-danger"
+                              type="button"
+                              onClick={() => handleDelete(v.id)}
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              {pageCount > 1 && (
+                <nav className="vehicle-pagination" aria-label="Vehicle pages">
+                  <Button
+                    variant="secondary"
+                    disabled={page === 1}
+                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <span>Page {page} of {pageCount}</span>
+                  <Button
+                    variant="secondary"
+                    disabled={page === pageCount}
+                    onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+                  >
+                    Next
+                  </Button>
+                </nav>
+              )}
+            </>
+          )}
+        </>
+      )}
     </PageShell>
   );
 }

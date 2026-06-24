@@ -4,6 +4,7 @@ import com.fleet.document.dto.ParserResultRequest;
 import com.fleet.document.entity.DocumentStatus;
 import com.fleet.document.entity.DocumentType;
 import com.fleet.document.entity.ParserStatus;
+import com.fleet.document.entity.TextExtractionMethod;
 import com.fleet.document.entity.VehicleDocument;
 import com.fleet.document.repository.VehicleDocumentRepository;
 import com.fleet.document.service.event.DocumentUploadedForParsingEvent;
@@ -57,7 +58,24 @@ class DocumentParsingJobListenerTest {
 
         verify(parserResultService).applyParserResult(document, result);
         verify(documentRepository).save(document);
-        verify(notificationService).notifyParsingCompleted(10L, document.getId());
+        verify(notificationService).notifyParsingCompleted(10L, document.getId(), false);
+    }
+
+    @Test
+    void ocrParsingCompletionNotifiesUploaderWithOcrFlag() {
+        VehicleDocument document = document();
+        ParserResultRequest result = parsedResult(document.getId(), TextExtractionMethod.OCR);
+        when(documentRepository.findById(document.getId())).thenReturn(Optional.of(document));
+        when(documentParsingService.parse(document)).thenReturn(result);
+        doAnswer(invocation -> {
+            VehicleDocument parsedDocument = invocation.getArgument(0);
+            parsedDocument.setStatus(DocumentStatus.NEEDS_REVIEW);
+            return null;
+        }).when(parserResultService).applyParserResult(document, result);
+
+        listener.parseUploadedDocument(new DocumentUploadedForParsingEvent(document.getId()));
+
+        verify(notificationService).notifyParsingCompleted(10L, document.getId(), true);
     }
 
     @Test
@@ -71,6 +89,8 @@ class DocumentParsingJobListenerTest {
                 null,
                 "test-parser",
                 "1.0",
+                null,
+                null,
                 null,
                 null,
                 "TEXT_EXTRACTION_FAILED",
@@ -92,6 +112,10 @@ class DocumentParsingJobListenerTest {
     }
 
     private ParserResultRequest parsedResult(UUID documentId) {
+        return parsedResult(documentId, TextExtractionMethod.PDFBOX);
+    }
+
+    private ParserResultRequest parsedResult(UUID documentId, TextExtractionMethod extractionMethod) {
         return new ParserResultRequest(
                 documentId,
                 ParserStatus.PARSED,
@@ -100,6 +124,8 @@ class DocumentParsingJobListenerTest {
                 new BigDecimal("0.91"),
                 "test-parser",
                 "1.0",
+                extractionMethod,
+                null,
                 Map.of("licensePlate", "B123ABC"),
                 java.util.List.of(),
                 null,

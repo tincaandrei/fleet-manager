@@ -21,7 +21,11 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -31,8 +35,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -279,6 +285,61 @@ public class VehicleController {
             Authentication authentication
     ) {
         return ResponseEntity.ok(vehicleService.assign(id, request, authentication));
+    }
+
+    @PostMapping(path = "/vehicles/{id}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(
+            summary = "Upload vehicle image",
+            description = "Uploads or replaces the display image for a vehicle. Accepts JPG, PNG, or WebP up to 5 MB. Requires `ADMIN` or `FLEET_MANAGER`."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Vehicle image saved", content = @Content(schema = @Schema(implementation = VehicleResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid image"),
+            @ApiResponse(responseCode = "401", description = "JWT token is missing or invalid"),
+            @ApiResponse(responseCode = "403", description = "Role is not allowed to update vehicles"),
+            @ApiResponse(responseCode = "404", description = "Vehicle was not found")
+    })
+    public ResponseEntity<VehicleResponse> uploadImage(
+            @Parameter(description = "Vehicle id.", example = "1") @PathVariable Long id,
+            @Parameter(description = "Image file to upload.", required = true)
+            @RequestPart("file") MultipartFile file,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(vehicleService.uploadImage(id, file, authentication));
+    }
+
+    @GetMapping("/vehicles/{id}/image")
+    @Operation(
+            summary = "Download vehicle image",
+            description = "Streams the vehicle display image. Employee/User roles can access only images for assigned vehicles."
+    )
+    public ResponseEntity<Resource> image(
+            @Parameter(description = "Vehicle id.", example = "1") @PathVariable Long id,
+            Authentication authentication
+    ) {
+        VehicleService.VehicleImageResource image = vehicleService.loadImage(id, authentication);
+        MediaType mediaType = image.contentType() == null
+                ? MediaType.APPLICATION_OCTET_STREAM
+                : MediaType.parseMediaType(image.contentType());
+        ContentDisposition disposition = ContentDisposition.inline()
+                .filename(image.originalFileName() == null ? "vehicle-image" : image.originalFileName())
+                .build();
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .body(image.resource());
+    }
+
+    @DeleteMapping("/vehicles/{id}/image")
+    @Operation(
+            summary = "Delete vehicle image",
+            description = "Removes the display image from a vehicle. Requires `ADMIN` or `FLEET_MANAGER`."
+    )
+    public ResponseEntity<VehicleResponse> deleteImage(
+            @Parameter(description = "Vehicle id.", example = "1") @PathVariable Long id,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(vehicleService.deleteImage(id, authentication));
     }
 
     @DeleteMapping("/vehicles/{id}")

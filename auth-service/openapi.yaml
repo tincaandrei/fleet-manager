@@ -12,14 +12,243 @@ tags:
 - name: Auth
   description: Authentication and user management endpoints.
 paths:
-  /admin/users/{id}/roles:
+  /users/{id}:
     put:
       tags:
       - Auth
-      summary: Update user role
-      description: Requires ADMIN role. Assigns a new role to a user.
+      summary: Update user profile
+      description: Updates any user profile. Requires SUPERADMIN.
+      operationId: updateUser
+      parameters:
+      - name: id
+        in: path
+        description: User id to update.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+      security:
+      - bearerAuth: []
+  /users/{id}/assignment:
+    put:
+      tags:
+      - Auth
+      summary: Assign unassigned user to organization
+      description: Requires SUPERADMIN.
+      operationId: assignUser
+      parameters:
+      - name: id
+        in: path
+        description: User id to assign.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignBusinessUserRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+      security:
+      - bearerAuth: []
+  /users/me:
+    get:
+      tags:
+      - Auth
+      summary: Current user profile
+      description: Returns profile data for the authenticated user.
+      operationId: me
+      responses:
+        "200":
+          description: Profile returned
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "404":
+          description: User profile not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      security:
+      - bearerAuth: []
+    put:
+      tags:
+      - Auth
+      summary: Update current user profile
+      description: "Updates email, phone, address, and optionally password for the\
+        \ authenticated user."
+      operationId: updateMe
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+        required: true
+      responses:
+        "409":
+          description: Email already exists
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "200":
+          description: Profile updated
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "400":
+          description: Invalid payload
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      security:
+      - bearerAuth: []
+  /businesses/{businessId}:
+    get:
+      tags:
+      - Auth
+      summary: Get business
+      description: Requires SUPERADMIN.
+      operationId: getBusiness
+      parameters:
+      - name: businessId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/BusinessResponse"
+      security:
+      - bearerAuth: []
+    put:
+      tags:
+      - Auth
+      summary: Update business
+      description: Requires SUPERADMIN.
+      operationId: updateBusiness
+      parameters:
+      - name: businessId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BusinessRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/BusinessResponse"
+      security:
+      - bearerAuth: []
+  /businesses/{businessId}/users/{id}:
+    put:
+      tags:
+      - Auth
+      summary: Update business user profile
+      description: "Updates a business user's email, phone, address, and optionally\
+        \ password. Requires SUPERADMIN or same-business BUSINESS_ADMIN."
+      operationId: updateBusinessUser
+      parameters:
+      - name: businessId
+        in: path
+        description: Business id.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      - name: id
+        in: path
+        description: User id to update.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+      security:
+      - bearerAuth: []
+  /businesses/{businessId}/users/{id}/role:
+    put:
+      tags:
+      - Auth
+      summary: Update business user role
+      description: Requires SUPERADMIN or same-business BUSINESS_ADMIN.
       operationId: updateRoles
       parameters:
+      - name: businessId
+        in: path
+        description: Business id.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
       - name: id
         in: path
         description: User id to update.
@@ -53,12 +282,101 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "400":
           description: Invalid role or payload
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+      security:
+      - bearerAuth: []
+  /users/me/profile-image:
+    get:
+      tags:
+      - Auth
+      summary: Download current user profile image
+      description: Returns the authenticated user's profile image.
+      operationId: downloadProfileImage
+      responses:
+        "404":
+          description: Profile image not found
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "200":
+          description: Profile image returned
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Auth
+      summary: Upload current user profile image
+      description: Stores or replaces the authenticated user's profile image.
+      operationId: uploadProfileImage
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              required:
+              - file
+              type: object
+              properties:
+                file:
+                  type: string
+                  description: "JPG, PNG, or WebP profile image, max 5 MB."
+                  format: binary
+      responses:
+        "200":
+          description: Profile image saved
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "400":
+          description: Invalid image
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      security:
+      - bearerAuth: []
+    delete:
+      tags:
+      - Auth
+      summary: Delete current user profile image
+      description: Removes the authenticated user's profile image.
+      operationId: deleteProfileImage
+      responses:
+        "200":
+          description: Profile image removed
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MeResponse"
         "401":
           description: Authentication required
           content:
@@ -81,8 +399,8 @@ paths:
               $ref: "#/components/schemas/RegisterRequest"
         required: true
       responses:
-        "400":
-          description: Validation failed
+        "409":
+          description: Username or email already exists
           content:
             '*/*':
               schema:
@@ -93,8 +411,8 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/MeResponse"
-        "409":
-          description: Username or email already exists
+        "400":
+          description: Validation failed
           content:
             '*/*':
               schema:
@@ -113,12 +431,6 @@ paths:
               $ref: "#/components/schemas/LoginRequest"
         required: true
       responses:
-        "400":
-          description: Validation failed
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
         "200":
           description: Login successful
           content:
@@ -131,57 +443,178 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /users/me:
-    get:
-      tags:
-      - Auth
-      summary: Current user profile
-      description: Returns profile data for the authenticated user.
-      operationId: me
-      responses:
-        "404":
-          description: User profile not found
+        "400":
+          description: Validation failed
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /businesses:
+    get:
+      tags:
+      - Auth
+      summary: List businesses
+      description: Requires SUPERADMIN.
+      operationId: listBusinesses
+      responses:
         "200":
-          description: Profile returned
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BusinessResponse"
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Auth
+      summary: Create business
+      description: Requires SUPERADMIN.
+      operationId: createBusiness
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BusinessRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/BusinessResponse"
+      security:
+      - bearerAuth: []
+  /businesses/{businessId}/users:
+    get:
+      tags:
+      - Auth
+      summary: List business users
+      description: Requires SUPERADMIN or same-business BUSINESS_ADMIN.
+      operationId: listBusinessUsers
+      parameters:
+      - name: businessId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MeResponse"
+      security:
+      - bearerAuth: []
+    post:
+      tags:
+      - Auth
+      summary: Create business user
+      description: Requires SUPERADMIN or same-business BUSINESS_ADMIN.
+      operationId: createBusinessUser
+      parameters:
+      - name: businessId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBusinessUserRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
           content:
             '*/*':
               schema:
                 $ref: "#/components/schemas/MeResponse"
-        "401":
-          description: Authentication required
+      security:
+      - bearerAuth: []
+  /users/{id}/profile-image:
+    get:
+      tags:
+      - Auth
+      summary: Download user profile image
+      description: Returns a user's profile image when the requester can view that
+        user.
+      operationId: downloadUserProfileImage
+      parameters:
+      - name: id
+        in: path
+        description: User id.
+        required: true
+        schema:
+          type: integer
+          format: int64
+        example: 1
+      responses:
+        "200":
+          description: OK
           content:
             '*/*':
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                type: string
+                format: binary
+      security:
+      - bearerAuth: []
+  /users/unassigned:
+    get:
+      tags:
+      - Auth
+      summary: List unassigned users
+      description: Requires SUPERADMIN.
+      operationId: listUnassignedUsers
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MeResponse"
       security:
       - bearerAuth: []
 components:
   schemas:
-    UpdateRoleRequest:
-      required:
-      - role
+    UpdateUserRequest:
       type: object
       properties:
-        role:
+        email:
           type: string
-          description: New role assigned to the target user.
-          example: ADMIN
-          enum:
-          - USER
-          - ADMIN
-      description: Payload used by admins to update a user's role.
-    ErrorResponse:
-      type: object
-      properties:
-        message:
+          description: User email address.
+          example: alice@example.com
+        phone:
+          maxLength: 30
+          minLength: 0
           type: string
-          description: Human-readable error details.
-          example: Authentication required
-      description: Standard API error payload.
+          description: Optional phone number.
+          nullable: true
+          example: "+40123456789"
+        address:
+          maxLength: 255
+          minLength: 0
+          type: string
+          description: Optional address.
+          nullable: true
+          example: Main Street 1
+        password:
+          type: string
+          description: Optional new password. Leave null/blank to keep the current
+            password.
+          example: password123
+      description: Payload used to update user profile data.
     MeResponse:
       type: object
       properties:
@@ -213,9 +646,120 @@ components:
           description: Current user role.
           example: USER
           enum:
-          - USER
+          - SUPERADMIN
+          - BUSINESS_ADMIN
+          - EMPLOYEE
           - ADMIN
+          - STAFF
+          - USER
+        businessId:
+          type: integer
+          format: int64
+        businessName:
+          type: string
+        profileImageUrl:
+          type: string
+          description: Authenticated endpoint for loading this user's profile image.
+          nullable: true
+        profileImageOriginalFileName:
+          type: string
+          description: Original profile image file name.
+          nullable: true
       description: User profile response.
+    AssignBusinessUserRequest:
+      required:
+      - businessId
+      - role
+      type: object
+      properties:
+        businessId:
+          type: integer
+          format: int64
+        role:
+          type: string
+          enum:
+          - SUPERADMIN
+          - BUSINESS_ADMIN
+          - EMPLOYEE
+          - ADMIN
+          - STAFF
+          - USER
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Human-readable error details.
+          example: Authentication required
+      description: Standard API error payload.
+    BusinessRequest:
+      required:
+      - name
+      type: object
+      properties:
+        name:
+          maxLength: 160
+          minLength: 0
+          type: string
+        registrationNumber:
+          maxLength: 80
+          minLength: 0
+          type: string
+        contactEmail:
+          maxLength: 160
+          minLength: 0
+          type: string
+        phone:
+          maxLength: 30
+          minLength: 0
+          type: string
+        address:
+          maxLength: 255
+          minLength: 0
+          type: string
+        active:
+          type: boolean
+    BusinessResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        registrationNumber:
+          type: string
+        contactEmail:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    UpdateRoleRequest:
+      required:
+      - role
+      type: object
+      properties:
+        role:
+          type: string
+          description: New role assigned to the target user.
+          example: BUSINESS_ADMIN
+          enum:
+          - SUPERADMIN
+          - BUSINESS_ADMIN
+          - EMPLOYEE
+          - ADMIN
+          - STAFF
+          - USER
+      description: Payload used by admins to update a user's role.
     RegisterRequest:
       required:
       - email
@@ -285,9 +829,56 @@ components:
           description: Current role embedded in the token.
           example: USER
           enum:
-          - USER
+          - SUPERADMIN
+          - BUSINESS_ADMIN
+          - EMPLOYEE
           - ADMIN
+          - STAFF
+          - USER
+        userId:
+          type: integer
+          format: int64
+        businessId:
+          type: integer
+          format: int64
+        businessName:
+          type: string
       description: Authentication result with bearer token.
+    CreateBusinessUserRequest:
+      required:
+      - email
+      - password
+      - role
+      - username
+      type: object
+      properties:
+        username:
+          maxLength: 50
+          minLength: 3
+          type: string
+        email:
+          type: string
+        password:
+          maxLength: 255
+          minLength: 6
+          type: string
+        role:
+          type: string
+          enum:
+          - SUPERADMIN
+          - BUSINESS_ADMIN
+          - EMPLOYEE
+          - ADMIN
+          - STAFF
+          - USER
+        phone:
+          maxLength: 30
+          minLength: 0
+          type: string
+        address:
+          maxLength: 255
+          minLength: 0
+          type: string
   securitySchemes:
     bearerAuth:
       type: http

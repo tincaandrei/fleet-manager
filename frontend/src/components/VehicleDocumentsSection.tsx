@@ -347,8 +347,17 @@ function ReviewForm({
 // ── Extraction badges ─────────────────────────────────────────────────────────
 
 function ExtractionBadges({ extraction }: { extraction: DocumentExtractionResponse }) {
+  const extractionMethodLabel = extraction.extractionMethod === 'OCR'
+    ? 'Extracted with OCR'
+    : extraction.extractionMethod === 'PDFBOX'
+      ? 'Extracted with PDF text'
+      : null;
+
   return (
     <div className="extraction-badges">
+      {extractionMethodLabel && (
+        <span className="badge">{extractionMethodLabel}</span>
+      )}
       {extraction.confidence !== null && (
         <span className="badge badge-confidence">
           Confidence {(extraction.confidence * 100).toFixed(0)}%
