@@ -9,6 +9,7 @@ import com.fleet.auth.entity.Credential;
 import com.fleet.auth.dto.MeResponse;
 import com.fleet.auth.dto.RegisterRequest;
 import com.fleet.auth.dto.UpdateUserRequest;
+import com.fleet.auth.dto.UserLookupResponse;
 import com.fleet.auth.entity.Business;
 import com.fleet.auth.entity.Role;
 import com.fleet.auth.entity.RoleEntity;
@@ -35,6 +36,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -184,6 +187,29 @@ public class UserInfoService implements UserDetailsService {
         return userDataRepository.findByBusinessIsNullOrderByCredentialUsernameAsc().stream()
                 .filter(userData -> userData.getCredential().getRole().getRoleName().canonical() != Role.SUPERADMIN)
                 .map(this::toMeResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserLookupResponse> lookupUsers(List<Long> ids, Authentication authentication) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> uniqueIds = ids.stream()
+                .filter(id -> id != null && id > 0)
+                .collect(Collectors.toUnmodifiableSet());
+        if (uniqueIds.isEmpty()) {
+            return List.of();
+        }
+
+        Long currentUserId = currentUserId(authentication);
+        Long currentBusinessId = currentBusinessId(authentication);
+        boolean superadmin = hasRole(authentication, Role.SUPERADMIN);
+        boolean businessAdmin = hasRole(authentication, Role.BUSINESS_ADMIN);
+
+        return userDataRepository.findByUserIdIn(List.copyOf(uniqueIds)).stream()
+                .filter(userData -> canLookupUser(userData, currentUserId, currentBusinessId, superadmin, businessAdmin))
+                .map(this::toUserLookupResponse)
                 .toList();
     }
 
@@ -398,6 +424,24 @@ public class UserInfoService implements UserDetailsService {
         }
     }
 
+    private boolean canLookupUser(UserData userData,
+                                  Long currentUserId,
+                                  Long currentBusinessId,
+                                  boolean superadmin,
+                                  boolean businessAdmin) {
+        if (superadmin) {
+            return true;
+        }
+        if (userData.getUserId().equals(currentUserId)) {
+            return true;
+        }
+        Business business = userData.getBusiness();
+        return businessAdmin
+                && business != null
+                && currentBusinessId != null
+                && currentBusinessId.equals(business.getId());
+    }
+
     private boolean hasRole(Authentication authentication, Role role) {
         if (authentication == null) {
             return false;
@@ -465,6 +509,17 @@ public class UserInfoService implements UserDetailsService {
                 business == null ? null : business.getName(),
                 profileImageUrl,
                 userData.getProfileImageOriginalFileName()
+        );
+    }
+
+    private UserLookupResponse toUserLookupResponse(UserData userData) {
+        Business business = userData.getBusiness();
+        return new UserLookupResponse(
+                userData.getUserId(),
+                userData.getCredential().getUsername(),
+                userData.getEmail(),
+                business == null ? null : business.getId(),
+                userData.getCredential().getRole().getRoleName().canonical()
         );
     }
 

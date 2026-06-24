@@ -40,6 +40,15 @@ export default function Navbar() {
       },
       // All roles: vehicles
       { label: 'Vehicles', to: '/vehicles', activePrefix: '/vehicles' },
+      {
+        label: role === 'SUPERADMIN'
+          ? 'All Document History'
+          : role === 'BUSINESS_ADMIN'
+          ? 'Organization History'
+          : 'My Documents',
+        to: '/documents/history',
+        activePrefix: '/documents/history',
+      },
       // SUPERADMIN + BUSINESS_ADMIN: alerts
       {
         label: 'Alerts',
@@ -56,7 +65,7 @@ export default function Navbar() {
       // All roles: profile
       { label: 'Profile', to: '/profile', activePrefix: '/profile' },
     ],
-    [isSuperAdmin, isAdmin, isBusinessAdmin, businessId],
+    [role, isSuperAdmin, isAdmin, isBusinessAdmin, businessId],
   );
 
   const visibleNavItems = navItems.filter((item) => item.visible !== false);
@@ -102,9 +111,12 @@ export default function Navbar() {
   }, [loadUnreadCount]);
 
   useEffect(() => {
-    loadProfileImageUrl();
+    const timeoutId = window.setTimeout(() => loadProfileImageUrl(), 0);
     window.addEventListener('profile-image-updated', loadProfileImageUrl);
-    return () => window.removeEventListener('profile-image-updated', loadProfileImageUrl);
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.removeEventListener('profile-image-updated', loadProfileImageUrl);
+    };
   }, [loadProfileImageUrl]);
 
   useEffect(() => {

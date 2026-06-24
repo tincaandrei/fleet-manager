@@ -9,6 +9,7 @@ import VehicleDetailsPage from './pages/VehicleDetailsPage';
 import VehicleCreatePage from './pages/VehicleCreatePage';
 import VehicleEditPage from './pages/VehicleEditPage';
 import DocumentAlertsPage from './pages/DocumentAlertsPage';
+import DocumentHistoryPage from './pages/DocumentHistoryPage';
 import BusinessesPage from './pages/BusinessesPage';
 import BusinessCreateEditPage from './pages/BusinessCreateEditPage';
 import BusinessUsersPage from './pages/BusinessUsersPage';
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
             <Route path="/vehicles" element={<ProtectedRoute><VehiclesPage /></ProtectedRoute>} />
             <Route path="/vehicles/:id" element={<ProtectedRoute><VehicleDetailsPage /></ProtectedRoute>} />
+            <Route path="/documents/history" element={<ProtectedRoute><DocumentHistoryPage /></ProtectedRoute>} />
 
             {/* SUPERADMIN + BUSINESS_ADMIN only */}
             <Route

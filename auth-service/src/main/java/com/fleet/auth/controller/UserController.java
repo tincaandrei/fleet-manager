@@ -11,6 +11,7 @@ import com.fleet.auth.dto.MeResponse;
 import com.fleet.auth.dto.RegisterRequest;
 import com.fleet.auth.dto.UpdateRoleRequest;
 import com.fleet.auth.dto.UpdateUserRequest;
+import com.fleet.auth.dto.UserLookupResponse;
 import com.fleet.auth.entity.Role;
 import com.fleet.auth.service.JwtService;
 import com.fleet.auth.service.CredentialDetails;
@@ -258,6 +259,17 @@ public class UserController {
     @SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<List<MeResponse>> listUnassignedUsers(Authentication authentication) {
         return ResponseEntity.ok(userInfoService.listUnassignedUsers(authentication));
+    }
+
+    @GetMapping("/users/lookup")
+    @Operation(summary = "Lookup users", description = "Returns minimal user display data for visible user ids.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<List<UserLookupResponse>> lookupUsers(
+            @Parameter(description = "User ids to lookup.", example = "1,2,3")
+            @RequestParam(name = "ids") List<Long> ids,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(userInfoService.lookupUsers(ids, authentication));
     }
 
     @PutMapping("/users/{id}/assignment")

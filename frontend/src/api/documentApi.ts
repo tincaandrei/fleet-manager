@@ -1,6 +1,8 @@
 import api from './axios';
 import type {
   DocumentResponse,
+  DocumentHistoryItem,
+  PagedResponse,
   ReviewDocumentRequest,
   VehicleDocumentAttributeResponse,
   VehicleAlertGroup,
@@ -11,6 +13,11 @@ import type {
 
 export const listDocumentsByVehicle = (vehicleId: number) =>
   api.get<DocumentResponse[]>('/api/documents', { params: { vehicleId } });
+
+export const listDocumentHistory = (page: number, size: number) =>
+  api.get<PagedResponse<DocumentHistoryItem>>('/api/documents/history', {
+    params: { page, size },
+  });
 
 /**
  * Upload a document for a vehicle.

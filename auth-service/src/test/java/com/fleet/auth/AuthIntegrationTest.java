@@ -348,6 +348,33 @@ class AuthIntegrationTest {
     }
 
     @Test
+    void lookupUsersReturnsOnlyVisibleUsers() throws Exception {
+        Business business = createBusiness("Acme Transport", true);
+        UserData admin = createUser("manager", "manager@example.com", "password123", Role.BUSINESS_ADMIN, business, null, null);
+        UserData employee = createUser("driver", "driver@example.com", "password123", Role.EMPLOYEE, business, null, null);
+        UserData outsider = createUser("outsider", "outsider@example.com", "password123", Role.EMPLOYEE, null, null, null);
+
+        String adminToken = login("manager", "password123");
+        mockMvc.perform(get("/users/lookup")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                        .param("ids", employee.getUserId().toString(), outsider.getUserId().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].userId").value(employee.getUserId()))
+                .andExpect(jsonPath("$[0].username").value("driver"))
+                .andExpect(jsonPath("$[0].email").value("driver@example.com"))
+                .andExpect(jsonPath("$[0].businessId").value(business.getId()))
+                .andExpect(jsonPath("$[1]").doesNotExist());
+
+        String employeeToken = login("driver", "password123");
+        mockMvc.perform(get("/users/lookup")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + employeeToken)
+                        .param("ids", admin.getUserId().toString(), employee.getUserId().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].userId").value(employee.getUserId()))
+                .andExpect(jsonPath("$[1]").doesNotExist());
+    }
+
+    @Test
     void openApiEndpointsArePublic() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
