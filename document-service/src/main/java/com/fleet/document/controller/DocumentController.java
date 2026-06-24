@@ -65,7 +65,7 @@ public class DocumentController {
     private final DocumentService documentService;
 
     @PostMapping(path = {"", "/"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Upload document", description = "Uploads a PDF for a vehicle, stores it, and marks it as PARSING.")
+    @Operation(summary = "Upload document", description = "Uploads a PDF or image for a vehicle, stores it, and marks it as PARSING.")
     @ApiResponses({
             @ApiResponse(responseCode = "202", description = "Document uploaded and parsing queued", content = @Content(schema = @Schema(implementation = DocumentResponse.class))),
             @ApiResponse(responseCode = "400", description = "Validation failed", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
@@ -73,7 +73,7 @@ public class DocumentController {
             @ApiResponse(responseCode = "403", description = "Role is not allowed to upload")
     })
     public ResponseEntity<DocumentResponse> upload(
-            @Parameter(description = "PDF file to upload.", required = true)
+            @Parameter(description = "PDF, JPG, JPEG, or PNG file to upload.", required = true)
             @RequestPart("file") MultipartFile file,
             @Parameter(description = "Vehicle id.", example = "1", required = true)
             @RequestParam(name = "vehicleId") Long vehicleId,
@@ -239,9 +239,9 @@ public class DocumentController {
     }
 
     @GetMapping("/{id}/download")
-    @Operation(summary = "Download document", description = "Downloads the stored PDF file. Requires authentication.")
+    @Operation(summary = "Download document", description = "Downloads the stored document file. Requires authentication.")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "PDF file returned"),
+            @ApiResponse(responseCode = "200", description = "Document file returned"),
             @ApiResponse(responseCode = "401", description = "Authentication required"),
             @ApiResponse(responseCode = "404", description = "Document not found")
     })
@@ -254,12 +254,23 @@ public class DocumentController {
         VehicleDocument document = documentService.getDownloadMetadata(id, authorizationHeader, authentication);
         Resource resource = documentService.download(id, authorizationHeader, authentication);
         return ResponseEntity.ok()
-                .contentType(MediaType.APPLICATION_PDF)
+                .contentType(resolveMediaType(document.getContentType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
                         .filename(document.getOriginalFileName())
                         .build()
                         .toString())
                 .body(resource);
+    }
+
+    private MediaType resolveMediaType(String contentType) {
+        if (contentType == null || contentType.isBlank()) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
+        try {
+            return MediaType.parseMediaType(contentType);
+        } catch (IllegalArgumentException exception) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
     }
 
     @GetMapping("/review-queue")

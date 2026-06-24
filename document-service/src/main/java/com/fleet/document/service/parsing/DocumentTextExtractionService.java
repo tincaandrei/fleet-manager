@@ -1,7 +1,8 @@
-package com.fleet.document.service;
+package com.fleet.document.service.parsing;
 
 import com.fleet.document.entity.TextExtractionMethod;
 import com.fleet.document.entity.VehicleDocument;
+import com.fleet.document.service.DocumentStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,7 +22,7 @@ import java.util.regex.Pattern;
 public class DocumentTextExtractionService {
 
     private static final Pattern DOCUMENT_KEYWORDS = Pattern.compile(
-            "\\b(rovigneta|rovinieta|roviniete|erovinieta|cnadnr|rca|asigurare|asigurator|polita|carte verde|factura|invoice|bon fiscal|tva|inspectie|tehnica|periodica|itp|rar)\\b",
+            "\\b(rovigneta|rovinieta|roviniete|erovinieta|cnadnr|cnair|rca|asigurare|asigurator|polita|carte verde|factura|invoice|bon fiscal|tva|inspectie|tehnica|periodica|itp|rar)\\b",
             Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
     );
 
@@ -37,6 +38,11 @@ public class DocumentTextExtractionService {
 
     public ExtractedTextResult extractText(VehicleDocument document) {
         byte[] content = loadContent(document);
+
+        if (isImage(document.getContentType(), document.getOriginalFileName())) {
+            log.info("Starting direct OCR for image document {}", document.getId());
+            return extractWithOcr(document, content);
+        }
 
         try {
             ExtractedTextResult pdfBoxResult = withQuality(pdfBoxTextExtractionService.extract(content));
@@ -55,30 +61,7 @@ public class DocumentTextExtractionService {
         }
 
         log.info("Starting OCR fallback for document {}", document.getId());
-        try {
-            ExtractedTextResult ocrResult = withQuality(ocrTextExtractionService.extract(content));
-            List<String> warnings = new ArrayList<>(ocrResult.warnings() == null ? List.of() : ocrResult.warnings());
-            warnings.add("OCR extraction may contain errors. Please verify manually.");
-            if (!isUsable(ocrResult.text())) {
-                throw new TextExtractionException("OCR_TEXT_UNREADABLE", "OCR did not produce readable text");
-            }
-            log.info(
-                    "OCR extraction completed for document {} with text length {} and quality {}",
-                    document.getId(),
-                    length(ocrResult.text()),
-                    ocrResult.textQualityScore()
-            );
-            return new ExtractedTextResult(
-                    ocrResult.text(),
-                    TextExtractionMethod.OCR,
-                    ocrResult.pageCount(),
-                    warnings,
-                    ocrResult.textQualityScore()
-            );
-        } catch (TextExtractionException ocrFailure) {
-            log.warn("OCR extraction failed for document {} with code {}", document.getId(), ocrFailure.errorCode());
-            throw ocrFailure;
-        }
+        return extractWithOcr(document, content);
     }
 
     boolean isUsable(String text) {
@@ -103,6 +86,44 @@ public class DocumentTextExtractionService {
         } catch (IOException exception) {
             throw new TextExtractionException("FILE_READ_FAILED", "Could not load stored document file", exception);
         }
+    }
+
+    private ExtractedTextResult extractWithOcr(VehicleDocument document, byte[] content) {
+        try {
+            ExtractedTextResult ocrResult = withQuality(isImage(document.getContentType(), document.getOriginalFileName())
+                    ? ocrTextExtractionService.extractImage(content)
+                    : ocrTextExtractionService.extract(content));
+            List<String> warnings = new ArrayList<>(ocrResult.warnings() == null ? List.of() : ocrResult.warnings());
+            warnings.add("OCR extraction may contain errors. Please verify manually.");
+            if (!isUsable(ocrResult.text())) {
+                throw new TextExtractionException("OCR_TEXT_UNREADABLE", "OCR did not produce readable text");
+            }
+            log.info(
+                    "OCR extraction completed for document {} with text length {} and quality {}",
+                    document.getId(),
+                    length(ocrResult.text()),
+                    ocrResult.textQualityScore()
+            );
+            return new ExtractedTextResult(
+                    ocrResult.text(),
+                    TextExtractionMethod.OCR,
+                    ocrResult.pageCount(),
+                    warnings,
+                    ocrResult.textQualityScore()
+            );
+        } catch (TextExtractionException ocrFailure) {
+            log.warn("OCR extraction failed for document {} with code {}", document.getId(), ocrFailure.errorCode());
+            throw ocrFailure;
+        }
+    }
+
+    private boolean isImage(String contentType, String fileName) {
+        String normalizedContentType = contentType == null ? "" : contentType.toLowerCase(Locale.ROOT);
+        String normalizedFileName = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
+        return normalizedContentType.startsWith("image/")
+                || normalizedFileName.endsWith(".jpg")
+                || normalizedFileName.endsWith(".jpeg")
+                || normalizedFileName.endsWith(".png");
     }
 
     private ExtractedTextResult withQuality(ExtractedTextResult result) {

@@ -1,4 +1,4 @@
-package com.fleet.document.service;
+package com.fleet.document.service.parsing;
 
 import com.fleet.document.entity.TextExtractionMethod;
 import lombok.extern.slf4j.Slf4j;
@@ -13,7 +13,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -66,6 +68,34 @@ public class OcrTextExtractionService {
         } catch (RuntimeException exception) {
             log.warn("Unexpected OCR failure", exception);
             throw new TextExtractionException("OCR_FAILED", "OCR failed while reading the PDF", exception);
+        }
+    }
+
+    public ExtractedTextResult extractImage(byte[] content) {
+        try {
+            BufferedImage image = ImageIO.read(new ByteArrayInputStream(content));
+            if (image == null) {
+                throw new TextExtractionException("OCR_FAILED", "Could not read image for OCR");
+            }
+            String text = normalizeWhitespace(tesseract().doOCR(image));
+            return new ExtractedTextResult(
+                    text,
+                    TextExtractionMethod.OCR,
+                    1,
+                    List.of(),
+                    0.0
+            );
+        } catch (TextExtractionException exception) {
+            throw exception;
+        } catch (TesseractException exception) {
+            log.warn("Tesseract OCR failed for image", exception);
+            throw new TextExtractionException("OCR_FAILED", "OCR failed while reading the image", exception);
+        } catch (IOException exception) {
+            log.warn("Image decoding for OCR failed", exception);
+            throw new TextExtractionException("OCR_FAILED", "Could not read image for OCR", exception);
+        } catch (RuntimeException exception) {
+            log.warn("Unexpected image OCR failure", exception);
+            throw new TextExtractionException("OCR_FAILED", "OCR failed while reading the image", exception);
         }
     }
 

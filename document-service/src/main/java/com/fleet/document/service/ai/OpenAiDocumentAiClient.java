@@ -1,4 +1,4 @@
-package com.fleet.document.service;
+package com.fleet.document.service.ai;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -23,7 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Service
-public class OpenAiDocumentLlmClient implements DocumentLlmClient {
+public class OpenAiDocumentAiClient implements DocumentAiClient {
 
     private static final String PROVIDER = "openai";
 
@@ -34,7 +34,7 @@ public class OpenAiDocumentLlmClient implements DocumentLlmClient {
     private final double temperature;
 
     @Autowired
-    public OpenAiDocumentLlmClient(
+    public OpenAiDocumentAiClient(
             ObjectMapper objectMapper,
             @Value("${openai.base-url}") String baseUrl,
             @Value("${openai.api-key}") String apiKey,
@@ -58,7 +58,7 @@ public class OpenAiDocumentLlmClient implements DocumentLlmClient {
         this.temperature = temperature;
     }
 
-    OpenAiDocumentLlmClient(
+    OpenAiDocumentAiClient(
             ObjectMapper objectMapper,
             RestClient openAiClient,
             String model,
@@ -73,52 +73,68 @@ public class OpenAiDocumentLlmClient implements DocumentLlmClient {
     }
 
     @Override
-    public LlmExtractionResult extractJson(String prompt, ObjectNode expectedSchema) {
-        ObjectNode request = buildRequest(prompt, expectedSchema);
+    public AiExtractionResponse extract(AiExtractionRequest request) {
+        ObjectNode apiRequest = buildRequest(request);
 
         try {
             JsonNode response = openAiClient.post()
                     .uri("/responses")
-                    .body(request)
+                    .body(apiRequest)
                     .retrieve()
                     .body(JsonNode.class);
             if (response == null || response.isNull()) {
-                throw new DocumentLlmException("OPENAI_INVALID_RESPONSE", "OpenAI returned an empty response");
+                throw new DocumentAiException("OPENAI_INVALID_RESPONSE", "OpenAI returned an empty response");
             }
-            return new LlmExtractionResult(parseJsonContent(extractOutputText(response)), usageFrom(response));
+            return new AiExtractionResponse(parseJsonContent(extractOutputText(response)), usageFrom(response));
         } catch (ResourceAccessException exception) {
             if (isTimeout(exception)) {
-                throw new DocumentLlmException("OPENAI_TIMEOUT", "OpenAI request timed out", exception);
+                throw new DocumentAiException("OPENAI_TIMEOUT", "OpenAI request timed out", exception);
             }
-            throw new DocumentLlmException("OPENAI_UNAVAILABLE", "OpenAI is unavailable", exception);
+            throw new DocumentAiException("OPENAI_UNAVAILABLE", "OpenAI is unavailable", exception);
         } catch (RestClientResponseException exception) {
             throw mapHttpException(exception);
-        } catch (DocumentLlmException exception) {
+        } catch (DocumentAiException exception) {
             throw exception;
         } catch (RestClientException exception) {
-            throw new DocumentLlmException("OPENAI_UNAVAILABLE", "OpenAI request failed", exception);
+            throw new DocumentAiException("OPENAI_UNAVAILABLE", "OpenAI request failed", exception);
         }
     }
 
-    private ObjectNode buildRequest(String prompt, ObjectNode expectedSchema) {
-        ObjectNode request = objectMapper.createObjectNode();
-        request.put("model", model);
-        request.set("input", input(prompt));
-        request.set("text", textFormat(expectedSchema));
-        request.put("max_output_tokens", maxOutputTokens);
-        request.put("temperature", temperature);
-        request.put("store", false);
-        return request;
+    private ObjectNode buildRequest(AiExtractionRequest request) {
+        ObjectNode apiRequest = objectMapper.createObjectNode();
+        apiRequest.put("model", model);
+        apiRequest.set("input", input(request));
+        apiRequest.set("text", textFormat(request.jsonSchema()));
+        apiRequest.put("max_output_tokens", maxOutputTokens);
+        apiRequest.put("temperature", temperature);
+        apiRequest.put("store", false);
+        return apiRequest;
     }
 
-    private ArrayNode input(String prompt) {
+    private ArrayNode input(AiExtractionRequest request) {
         ArrayNode input = objectMapper.createArrayNode();
         input.add(message("system", """
-                You are a strict JSON extraction engine for Romanian vehicle document parsing.
-                Return only values that are visible in the provided document text.
-                Never invent values. Use null for missing or uncertain fields.
+                You are a strict JSON extraction engine for Romanian vehicle fleet documents.
+                Return only values explicitly visible in the provided document text.
+                Never invent values. Use null for missing or uncertain values.
                 """));
-        input.add(message("user", prompt));
+        input.add(message("user", """
+                Document type: %s
+                Document subtype: %s
+                Extraction method: %s
+
+                Extraction instructions:
+                %s
+
+                Document text:
+                %s
+                """.formatted(
+                request.documentType(),
+                request.subtype(),
+                request.extractionMethod(),
+                request.promptInstructions(),
+                limitText(request.extractedText())
+        )));
         return input;
     }
 
@@ -129,92 +145,15 @@ public class OpenAiDocumentLlmClient implements DocumentLlmClient {
         return message;
     }
 
-    private ObjectNode textFormat(ObjectNode expectedSchema) {
+    private ObjectNode textFormat(ObjectNode jsonSchema) {
         ObjectNode text = objectMapper.createObjectNode();
         ObjectNode format = objectMapper.createObjectNode();
         format.put("type", "json_schema");
         format.put("name", "vehicle_document_extraction");
         format.put("strict", true);
-        format.set("schema", jsonSchema(expectedSchema));
+        format.set("schema", jsonSchema);
         text.set("format", format);
         return text;
-    }
-
-    private ObjectNode jsonSchema(ObjectNode expectedSchema) {
-        ObjectNode schema = objectMapper.createObjectNode();
-        schema.put("type", "object");
-        ObjectNode properties = schema.putObject("properties");
-        ArrayNode required = schema.putArray("required");
-
-        expectedSchema.fields().forEachRemaining(entry -> {
-            properties.set(entry.getKey(), schemaForDescriptor(entry.getKey(), entry.getValue().asText()));
-            required.add(entry.getKey());
-        });
-
-        schema.put("additionalProperties", false);
-        return schema;
-    }
-
-    private JsonNode schemaForDescriptor(String field, String descriptor) {
-        if ("llmConfidence".equals(field)) {
-            ObjectNode node = nullableType("number");
-            node.put("minimum", 0);
-            node.put("maximum", 1);
-            return node;
-        }
-        if (descriptor != null && descriptor.startsWith("array")) {
-            return arraySchema();
-        }
-        if (descriptor != null && descriptor.contains("|")) {
-            return enumSchema(descriptor);
-        }
-        if (descriptor != null && descriptor.contains("number")) {
-            return nullableType("number");
-        }
-        return nullableType("string");
-    }
-
-    private ObjectNode nullableType(String type) {
-        ObjectNode node = objectMapper.createObjectNode();
-        ArrayNode types = node.putArray("type");
-        types.add(type);
-        types.add("null");
-        return node;
-    }
-
-    private ObjectNode enumSchema(String descriptor) {
-        ObjectNode node = nullableType("string");
-        ArrayNode values = node.putArray("enum");
-        for (String value : descriptor.split("\\|")) {
-            String trimmed = value.trim();
-            if ("null".equals(trimmed)) {
-                values.addNull();
-            } else if (!trimmed.isBlank()) {
-                values.add(trimmed);
-            }
-        }
-        return node;
-    }
-
-    private ObjectNode arraySchema() {
-        ObjectNode node = nullableType("array");
-        ObjectNode item = objectMapper.createObjectNode();
-        item.put("type", "object");
-        ObjectNode properties = item.putObject("properties");
-        properties.set("description", nullableType("string"));
-        properties.set("quantity", nullableType("number"));
-        properties.set("unit", nullableType("string"));
-        properties.set("unitPrice", nullableType("number"));
-        properties.set("totalPrice", nullableType("number"));
-        ArrayNode required = item.putArray("required");
-        required.add("description");
-        required.add("quantity");
-        required.add("unit");
-        required.add("unitPrice");
-        required.add("totalPrice");
-        item.put("additionalProperties", false);
-        node.set("items", item);
-        return node;
     }
 
     private String extractOutputText(JsonNode response) {
@@ -224,7 +163,7 @@ public class OpenAiDocumentLlmClient implements DocumentLlmClient {
 
         JsonNode output = response.path("output");
         if (!output.isArray()) {
-            throw new DocumentLlmException("OPENAI_INVALID_RESPONSE", "OpenAI response does not contain output text");
+            throw new DocumentAiException("OPENAI_INVALID_RESPONSE", "OpenAI response does not contain output text");
         }
 
         List<String> chunks = new ArrayList<>();
@@ -235,7 +174,7 @@ public class OpenAiDocumentLlmClient implements DocumentLlmClient {
             }
             for (JsonNode contentItem : content) {
                 if (contentItem.hasNonNull("refusal")) {
-                    throw new DocumentLlmException("OPENAI_INVALID_RESPONSE", "OpenAI refused the document extraction request");
+                    throw new DocumentAiException("OPENAI_INVALID_RESPONSE", "OpenAI refused the document extraction request");
                 }
                 if ("output_text".equals(contentItem.path("type").asText()) && contentItem.hasNonNull("text")) {
                     chunks.add(contentItem.get("text").asText());
@@ -245,7 +184,7 @@ public class OpenAiDocumentLlmClient implements DocumentLlmClient {
 
         String text = String.join("", chunks).trim();
         if (text.isBlank()) {
-            throw new DocumentLlmException("OPENAI_INVALID_RESPONSE", "OpenAI response does not contain output text");
+            throw new DocumentAiException("OPENAI_INVALID_RESPONSE", "OpenAI response does not contain output text");
         }
         return text;
     }
@@ -254,7 +193,7 @@ public class OpenAiDocumentLlmClient implements DocumentLlmClient {
         try {
             return objectMapper.readTree(content);
         } catch (JsonProcessingException exception) {
-            throw new DocumentLlmException("OPENAI_INVALID_RESPONSE", "OpenAI returned invalid JSON", exception);
+            throw new DocumentAiException("OPENAI_INVALID_RESPONSE", "OpenAI returned invalid JSON", exception);
         }
     }
 
@@ -274,18 +213,18 @@ public class OpenAiDocumentLlmClient implements DocumentLlmClient {
         return node != null && node.isInt() ? node.asInt() : null;
     }
 
-    private DocumentLlmException mapHttpException(RestClientResponseException exception) {
+    private DocumentAiException mapHttpException(RestClientResponseException exception) {
         int status = exception.getStatusCode().value();
         if (status == 401 || status == 403) {
-            return new DocumentLlmException("OPENAI_AUTH_FAILED", "OpenAI API key was rejected", exception);
+            return new DocumentAiException("OPENAI_AUTH_FAILED", "OpenAI API key was rejected", exception);
         }
         if (status == 429) {
-            return new DocumentLlmException("OPENAI_RATE_LIMITED", "OpenAI rate limit was reached", exception);
+            return new DocumentAiException("OPENAI_RATE_LIMITED", "OpenAI rate limit was reached", exception);
         }
         if (status >= 500) {
-            return new DocumentLlmException("OPENAI_UNAVAILABLE", "OpenAI service is unavailable", exception);
+            return new DocumentAiException("OPENAI_UNAVAILABLE", "OpenAI service is unavailable", exception);
         }
-        return new DocumentLlmException("OPENAI_INVALID_RESPONSE", "OpenAI request was rejected", exception);
+        return new DocumentAiException("OPENAI_INVALID_RESPONSE", "OpenAI request was rejected", exception);
     }
 
     private boolean isTimeout(Throwable throwable) {
@@ -305,5 +244,16 @@ public class OpenAiDocumentLlmClient implements DocumentLlmClient {
         factory.setConnectTimeout(timeoutMillis);
         factory.setReadTimeout(timeoutMillis);
         return factory;
+    }
+
+    private String limitText(String text) {
+        if (text == null) {
+            return "";
+        }
+        int maxCharacters = 12_000;
+        if (text.length() <= maxCharacters) {
+            return text;
+        }
+        return text.substring(0, maxCharacters) + "\n[TRUNCATED]";
     }
 }

@@ -1044,6 +1044,7 @@ button[type='submit']:disabled {
 .status-ARCHIVED     { background: #f3f4f6; color: #6b7280; }
 .status-PARSING      { background: #dbeafe; color: #1e40af; }
 .status-PARSING_FAILED { background: #fee2e2; color: #991b1b; }
+.status-FAILED { background: #fee2e2; color: #991b1b; }
 
 /* ── ROLE / GENERIC BADGE ────────────────────────────────────────────────── */
 
@@ -1307,6 +1308,7 @@ p { margin: 0.5rem 0; }
 .doc-card:has(.status-ARCHIVED)      { border-left-color: var(--border-dark); }
 .doc-card:has(.status-PARSING)       { border-left-color: #3b82f6; }
 .doc-card:has(.status-PARSING_FAILED) { border-left-color: var(--red); }
+.doc-card:has(.status-FAILED) { border-left-color: var(--red); }
 
 .doc-card-header {
   display: flex;
@@ -1497,6 +1499,94 @@ p { margin: 0.5rem 0; }
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.65rem 1.25rem;
+}
+
+.parser-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.55rem 0.7rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.parser-metadata strong {
+  color: var(--text);
+}
+
+.parser-metadata-warning {
+  flex-basis: 100%;
+  color: #92400e;
+  font-weight: 600;
+}
+
+.parser-warning-panel {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: var(--radius);
+  color: #92400e;
+  font-size: 0.82rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.parser-warning-panel strong {
+  display: block;
+  margin-bottom: 0.3rem;
+}
+
+.parser-warning-panel ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.invoice-items-preview {
+  grid-column: 1 / -1;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.65rem;
+}
+
+.invoice-items-preview strong {
+  display: block;
+  color: var(--pine);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+}
+
+.invoice-items-table-wrap {
+  overflow-x: auto;
+}
+
+.invoice-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.invoice-items-table th,
+.invoice-items-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.invoice-items-table th {
+  color: var(--subtle);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.invoice-items-preview pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 @media (max-width: 600px) {

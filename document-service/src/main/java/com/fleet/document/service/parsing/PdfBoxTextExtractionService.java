@@ -1,4 +1,4 @@
-package com.fleet.document.service;
+package com.fleet.document.service.parsing;
 
 import com.fleet.document.entity.TextExtractionMethod;
 import lombok.extern.slf4j.Slf4j;
