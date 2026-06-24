@@ -7,6 +7,8 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from '../api/notificationApi';
+import { getMe } from '../api/authApi';
+import UserAvatar from './UserAvatar';
 import type { NotificationResponse } from '../types/notification';
 
 type NavItem = {
@@ -25,6 +27,7 @@ export default function Navbar() {
   const [notifications, setNotifications] = useState<NotificationResponse[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
 
   const navItems = useMemo<NavItem[]>(
     () => [
@@ -72,6 +75,16 @@ export default function Navbar() {
       .finally(() => setNotificationsLoading(false));
   }, []);
 
+  const loadProfileImageUrl = useCallback(() => {
+    if (!username) {
+      setProfileImageUrl(null);
+      return;
+    }
+    getMe()
+      .then((res) => setProfileImageUrl(res.data.profileImageUrl))
+      .catch(() => setProfileImageUrl(null));
+  }, [username]);
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setIsMenuOpen(false);
@@ -87,6 +100,12 @@ export default function Navbar() {
     }, 20000);
     return () => window.clearInterval(intervalId);
   }, [loadUnreadCount]);
+
+  useEffect(() => {
+    loadProfileImageUrl();
+    window.addEventListener('profile-image-updated', loadProfileImageUrl);
+    return () => window.removeEventListener('profile-image-updated', loadProfileImageUrl);
+  }, [loadProfileImageUrl]);
 
   useEffect(() => {
     document.body.classList.toggle('mobile-menu-open', isMenuOpen);
@@ -144,8 +163,6 @@ export default function Navbar() {
   const isActive = (prefix: string) =>
     location.pathname === prefix || location.pathname.startsWith(prefix + '/');
 
-  const initials = username ? username.slice(0, 2).toUpperCase() : '??';
-
   /** Human-readable role label */
   const roleLabel = role === 'SUPERADMIN'
     ? 'Super Admin'
@@ -175,7 +192,20 @@ export default function Navbar() {
         aria-expanded={notificationsOpen}
         onClick={handleToggleNotifications}
       >
-        <span aria-hidden="true">Notifications</span>
+        <svg
+          className="notification-bell"
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+        <span className="sr-only">Notifications</span>
         {unreadCount > 0 && (
           <span className="notification-count">{unreadCount > 99 ? '99+' : unreadCount}</span>
         )}
@@ -235,9 +265,7 @@ export default function Navbar() {
       <div className="navbar-user">
         {renderNotifications('desktop')}
 
-        <div className="nav-avatar" aria-hidden="true" title={username ?? ''}>
-          {initials}
-        </div>
+        <UserAvatar username={username} imageUrl={profileImageUrl} />
 
         <div className="nav-user-info">
           <span className="nav-username">{username}</span>
@@ -291,9 +319,7 @@ export default function Navbar() {
         </div>
 
         <div className="mobile-menu-user">
-          <div className="nav-avatar" aria-hidden="true">
-            {initials}
-          </div>
+          <UserAvatar username={username} imageUrl={profileImageUrl} />
           <div className="nav-user-info">
             <span className="nav-username">{username}</span>
             {roleLabel && <span className="nav-role">{roleLabel}</span>}

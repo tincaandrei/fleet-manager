@@ -5,6 +5,7 @@ import com.fleet.document.dto.ApprovedDocumentDataResponse;
 import com.fleet.document.dto.DocumentExtractionResponse;
 import com.fleet.document.dto.DocumentInfoFolderResponse;
 import com.fleet.document.dto.DocumentResponse;
+import com.fleet.document.dto.LlmUsageDto;
 import com.fleet.document.dto.ParserResultRequest;
 import com.fleet.document.dto.RejectDocumentRequest;
 import com.fleet.document.dto.ReviewDecision;
@@ -570,9 +571,30 @@ public class DocumentService {
                 draft.getWarnings(),
                 draft.getParserName(),
                 draft.getParserVersion(),
+                draft.getExtractionMethod(),
+                toLlmUsageResponse(draft),
                 draft.getParserStatus(),
                 draft.getErrorCode(),
                 draft.getErrorMessage()
+        );
+    }
+
+    private LlmUsageDto toLlmUsageResponse(DocumentExtractionDraft draft) {
+        if (draft.getLlmProvider() == null
+                && draft.getLlmModel() == null
+                && draft.getLlmRequestId() == null
+                && draft.getInputTokens() == null
+                && draft.getOutputTokens() == null
+                && draft.getTotalTokens() == null) {
+            return null;
+        }
+        return new LlmUsageDto(
+                draft.getLlmProvider(),
+                draft.getLlmModel(),
+                draft.getLlmRequestId(),
+                draft.getInputTokens(),
+                draft.getOutputTokens(),
+                draft.getTotalTokens()
         );
     }
 

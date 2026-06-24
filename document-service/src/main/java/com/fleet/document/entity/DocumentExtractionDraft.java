@@ -68,6 +68,25 @@ public class DocumentExtractionDraft {
     private String parserVersion;
 
     @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private TextExtractionMethod extractionMethod;
+
+    @Column(length = 50)
+    private String llmProvider;
+
+    @Column(length = 100)
+    private String llmModel;
+
+    @Column(length = 100)
+    private String llmRequestId;
+
+    private Integer inputTokens;
+
+    private Integer outputTokens;
+
+    private Integer totalTokens;
+
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50)
     private ParserStatus parserStatus;
 

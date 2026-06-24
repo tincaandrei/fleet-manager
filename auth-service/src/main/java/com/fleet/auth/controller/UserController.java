@@ -26,18 +26,25 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -120,6 +127,70 @@ public class UserController {
     public ResponseEntity<MeResponse> updateMe(@Valid @RequestBody UpdateUserRequest request,
                                                Authentication authentication) {
         return ResponseEntity.ok(userInfoService.updateCurrentUser(request, authentication));
+    }
+
+    @PostMapping(value = "/users/me/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload current user profile image", description = "Stores or replaces the authenticated user's profile image.")
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Profile image saved", content = @Content(schema = @Schema(implementation = MeResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid image", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Authentication required", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<MeResponse> uploadProfileImage(
+            @Parameter(description = "JPG, PNG, or WebP profile image, max 5 MB.", required = true)
+            @RequestParam("file") MultipartFile file,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(userInfoService.uploadCurrentUserProfileImage(file, authentication));
+    }
+
+    @GetMapping("/users/me/profile-image")
+    @Operation(summary = "Download current user profile image", description = "Returns the authenticated user's profile image.")
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Profile image returned"),
+            @ApiResponse(responseCode = "401", description = "Authentication required", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Profile image not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<Resource> downloadProfileImage(Authentication authentication) {
+        UserInfoService.ProfileImageResource image = userInfoService.loadCurrentUserProfileImage(authentication);
+        return profileImageResponse(image);
+    }
+
+    @GetMapping("/users/{id}/profile-image")
+    @Operation(summary = "Download user profile image", description = "Returns a user's profile image when the requester can view that user.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<Resource> downloadUserProfileImage(
+            @Parameter(description = "User id.", example = "1") @PathVariable Long id,
+            Authentication authentication
+    ) {
+        UserInfoService.ProfileImageResource image = userInfoService.loadUserProfileImage(id, authentication);
+        return profileImageResponse(image);
+    }
+
+    private ResponseEntity<Resource> profileImageResponse(UserInfoService.ProfileImageResource image) {
+        MediaType mediaType = image.contentType() == null
+                ? MediaType.APPLICATION_OCTET_STREAM
+                : MediaType.parseMediaType(image.contentType());
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
+                        .filename(image.originalFileName() == null ? "profile-image" : image.originalFileName())
+                        .build()
+                        .toString())
+                .body(image.resource());
+    }
+
+    @DeleteMapping("/users/me/profile-image")
+    @Operation(summary = "Delete current user profile image", description = "Removes the authenticated user's profile image.")
+    @SecurityRequirement(name = "bearerAuth")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Profile image removed", content = @Content(schema = @Schema(implementation = MeResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Authentication required", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<MeResponse> deleteProfileImage(Authentication authentication) {
+        return ResponseEntity.ok(userInfoService.deleteCurrentUserProfileImage(authentication));
     }
 
     @PutMapping("/users/{id}")

@@ -75,6 +75,17 @@ public class Vehicle {
 
     private Long currentMileage;
 
+    @Column(length = 500)
+    private String imageStoragePath;
+
+    @Column(length = 255)
+    private String imageOriginalFileName;
+
+    @Column(length = 100)
+    private String imageContentType;
+
+    private Long imageFileSize;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 

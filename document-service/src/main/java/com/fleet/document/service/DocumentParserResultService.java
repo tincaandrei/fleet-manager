@@ -49,9 +49,29 @@ public class DocumentParserResultService {
         draft.setWarnings(request.warnings());
         draft.setParserName(normalizeText(request.parserName()));
         draft.setParserVersion(normalizeText(request.parserVersion()));
+        draft.setExtractionMethod(request.extractionMethod());
+        applyLlmUsage(draft, request);
         draft.setParserStatus(request.parserStatus());
         draft.setErrorCode(normalizeText(request.errorCode()));
         draft.setErrorMessage(normalizeText(request.errorMessage()));
+    }
+
+    private void applyLlmUsage(DocumentExtractionDraft draft, ParserResultRequest request) {
+        if (request.llmUsage() == null) {
+            draft.setLlmProvider(null);
+            draft.setLlmModel(null);
+            draft.setLlmRequestId(null);
+            draft.setInputTokens(null);
+            draft.setOutputTokens(null);
+            draft.setTotalTokens(null);
+            return;
+        }
+        draft.setLlmProvider(normalizeText(request.llmUsage().provider()));
+        draft.setLlmModel(normalizeText(request.llmUsage().model()));
+        draft.setLlmRequestId(normalizeText(request.llmUsage().requestId()));
+        draft.setInputTokens(request.llmUsage().inputTokens());
+        draft.setOutputTokens(request.llmUsage().outputTokens());
+        draft.setTotalTokens(request.llmUsage().totalTokens());
     }
 
     private boolean parserResultIsValid(ParserResultRequest request) {

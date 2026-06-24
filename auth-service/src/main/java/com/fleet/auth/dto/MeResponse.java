@@ -18,6 +18,10 @@ public record MeResponse(
         @Schema(description = "Current user role.", example = "USER")
         Role role,
         Long businessId,
-        String businessName
+        String businessName,
+        @Schema(description = "Authenticated endpoint for loading this user's profile image.", nullable = true)
+        String profileImageUrl,
+        @Schema(description = "Original profile image file name.", nullable = true)
+        String profileImageOriginalFileName
 ) {
 }

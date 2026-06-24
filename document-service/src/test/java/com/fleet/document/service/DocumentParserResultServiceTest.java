@@ -1,10 +1,12 @@
 package com.fleet.document.service;
 
 import com.fleet.document.dto.ParserResultRequest;
+import com.fleet.document.dto.LlmUsageDto;
 import com.fleet.document.entity.DocumentExtractionDraft;
 import com.fleet.document.entity.DocumentStatus;
 import com.fleet.document.entity.DocumentType;
 import com.fleet.document.entity.ParserStatus;
+import com.fleet.document.entity.TextExtractionMethod;
 import com.fleet.document.entity.VehicleDocument;
 import com.fleet.document.repository.DocumentExtractionDraftRepository;
 import org.junit.jupiter.api.Test;
@@ -47,6 +49,8 @@ class DocumentParserResultServiceTest {
                 new BigDecimal("0.91"),
                 "test-parser",
                 "1.0",
+                TextExtractionMethod.OCR,
+                new LlmUsageDto("openai", "gpt-5.4-mini", "resp_123", 120, 40, 160),
                 Map.of("licensePlate", "B123ABC", "validUntil", "2027-03-10"),
                 java.util.List.of(),
                 null,
@@ -59,7 +63,12 @@ class DocumentParserResultServiceTest {
         assertThat(document.getDocumentType()).isEqualTo(DocumentType.INSURANCE);
         assertThat(document.getDocumentSubtype()).isEqualTo("RCA");
         assertThat(draftCaptor.getValue().getParserStatus()).isEqualTo(ParserStatus.PARSED);
+        assertThat(draftCaptor.getValue().getExtractionMethod()).isEqualTo(TextExtractionMethod.OCR);
         assertThat(draftCaptor.getValue().getExtractedData()).containsEntry("licensePlate", "B123ABC");
+        assertThat(draftCaptor.getValue().getLlmProvider()).isEqualTo("openai");
+        assertThat(draftCaptor.getValue().getLlmModel()).isEqualTo("gpt-5.4-mini");
+        assertThat(draftCaptor.getValue().getLlmRequestId()).isEqualTo("resp_123");
+        assertThat(draftCaptor.getValue().getTotalTokens()).isEqualTo(160);
     }
 
     @Test
@@ -76,6 +85,8 @@ class DocumentParserResultServiceTest {
                 null,
                 "test-parser",
                 "1.0",
+                null,
+                null,
                 null,
                 null,
                 "TEXT_EXTRACTION_FAILED",

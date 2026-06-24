@@ -39,6 +39,10 @@ public record VehicleResponse(
         String assignedDriverName,
         @Schema(description = "Current odometer value.", example = "25000")
         Long currentMileage,
+        @Schema(description = "Authenticated endpoint for the vehicle image when present.", example = "/api/fleet/vehicles/1/image")
+        String imageUrl,
+        @Schema(description = "Original uploaded vehicle image filename.", example = "logan.jpg")
+        String imageOriginalFileName,
         @Schema(description = "Creation timestamp.", example = "2026-05-04T11:30:00Z")
         Instant createdAt,
         @Schema(description = "Last update timestamp.", example = "2026-05-04T11:45:00Z")

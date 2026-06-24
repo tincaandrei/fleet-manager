@@ -43,6 +43,18 @@ public class UserData {
     @Column(length = 255)
     private String address;
 
+    @Column(name = "profile_image_storage_path")
+    private String profileImageStoragePath;
+
+    @Column(name = "profile_image_original_file_name")
+    private String profileImageOriginalFileName;
+
+    @Column(name = "profile_image_content_type", length = 100)
+    private String profileImageContentType;
+
+    @Column(name = "profile_image_file_size")
+    private Long profileImageFileSize;
+
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "business_id")
     private Business business;

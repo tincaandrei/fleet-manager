@@ -22,6 +22,8 @@ export interface VehicleRequest {
 export interface Vehicle extends VehicleRequest {
   id: number;
   businessId: number | null;
+  imageUrl: string | null;
+  imageOriginalFileName: string | null;
   createdAt: string;
   updatedAt: string;
 }

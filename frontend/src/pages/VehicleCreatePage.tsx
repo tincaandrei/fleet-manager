@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createVehicle } from '../api/vehicleApi';
+import { createVehicle, uploadVehicleImage } from '../api/vehicleApi';
 import type { VehicleRequest } from '../types/vehicle';
 import VehicleForm from '../components/VehicleForm';
 import PageShell from '../components/ui/PageShell';
@@ -11,12 +11,16 @@ export default function VehicleCreatePage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   const handleSubmit = async (data: VehicleRequest) => {
     setLoading(true);
     setError(null);
     try {
       const res = await createVehicle(data);
+      if (imageFile) {
+        await uploadVehicleImage(res.data.id, imageFile);
+      }
       navigate(`/vehicles/${res.data.id}`);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'Failed to create vehicle.'));
@@ -31,7 +35,14 @@ export default function VehicleCreatePage() {
           title="New Vehicle"
           description="Create a vehicle record with assignment and operating details."
         />
-        <VehicleForm onSubmit={handleSubmit} loading={loading} error={error} submitLabel="Create Vehicle" />
+        <VehicleForm
+          onSubmit={handleSubmit}
+          loading={loading}
+          error={error}
+          submitLabel="Create Vehicle"
+          imageFile={imageFile}
+          onImageFileChange={setImageFile}
+        />
     </PageShell>
   );
 }

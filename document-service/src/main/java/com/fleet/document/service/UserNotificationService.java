@@ -22,6 +22,7 @@ public class UserNotificationService {
 
     private static final String PARSING_COMPLETED_TITLE = "Document parsing completed";
     private static final String PARSING_COMPLETED_MESSAGE = "Your uploaded document has been processed and is ready for review.";
+    private static final String OCR_PARSING_COMPLETED_MESSAGE = "Your uploaded document has been processed and is ready for review. The document was scanned, so OCR was used. Please verify the extracted fields.";
     private static final String PARSING_FAILED_TITLE = "Document parsing failed";
     private static final String PARSING_FAILED_MESSAGE = "We could not automatically process your document. Please review or reupload it.";
 
@@ -29,12 +30,17 @@ public class UserNotificationService {
 
     @Transactional
     public void notifyParsingCompleted(Long userId, UUID documentId) {
+        notifyParsingCompleted(userId, documentId, false);
+    }
+
+    @Transactional
+    public void notifyParsingCompleted(Long userId, UUID documentId, boolean ocrUsed) {
         createDocumentNotification(
                 userId,
                 documentId,
                 NotificationType.DOCUMENT_PARSING_COMPLETED,
                 PARSING_COMPLETED_TITLE,
-                PARSING_COMPLETED_MESSAGE
+                ocrUsed ? OCR_PARSING_COMPLETED_MESSAGE : PARSING_COMPLETED_MESSAGE
         );
     }
 

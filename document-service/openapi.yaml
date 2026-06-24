@@ -646,6 +646,11 @@ components:
           type: string
         parserVersion:
           type: string
+        extractionMethod:
+          type: string
+          enum:
+          - PDFBOX
+          - OCR
         parserStatus:
           type: string
           enum:
@@ -741,6 +746,11 @@ components:
           type: string
         parserVersion:
           type: string
+        extractionMethod:
+          type: string
+          enum:
+          - PDFBOX
+          - OCR
         extractedData:
           type: object
           additionalProperties:

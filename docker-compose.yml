@@ -71,6 +71,9 @@ services:
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD in .env}
+      PROFILE_IMAGE_STORAGE_PATH: /app/profile-images
+    volumes:
+      - auth-profile-image-data:/app/profile-images
     networks:
       - fleet-net
     expose:
@@ -114,10 +117,13 @@ services:
         condition: service_started
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      VEHICLE_IMAGE_STORAGE_PATH: /app/vehicle-images
       SPRING_DATASOURCE_URL: jdbc:postgresql://fleet-postgres:5432/${FLEET_DB_NAME:-fleet_deploy}
       SPRING_DATASOURCE_USERNAME: ${FLEET_DB_USER:-fleet_user}
       SPRING_DATASOURCE_PASSWORD: ${FLEET_DB_PASSWORD:?Set FLEET_DB_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+    volumes:
+      - fleet-vehicle-image-data:/app/vehicle-images
     networks:
       - fleet-net
     expose:
@@ -161,8 +167,6 @@ services:
         condition: service_started
       auth-service:
         condition: service_started
-      ollama:
-        condition: service_started
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://document-postgres:5432/${DOCUMENT_DB_NAME:-document_deploy}
@@ -170,9 +174,12 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${DOCUMENT_DB_PASSWORD:?Set DOCUMENT_DB_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
       FLEET_SERVICE_URL: http://fleet-service:8080
-      OLLAMA_BASE_URL: http://ollama:11434
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
-      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-400s}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in .env}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4-mini}
+      OPENAI_TIMEOUT: ${OPENAI_TIMEOUT:-60s}
+      OPENAI_MAX_OUTPUT_TOKENS: ${OPENAI_MAX_OUTPUT_TOKENS:-1500}
+      OPENAI_TEMPERATURE: ${OPENAI_TEMPERATURE:-0}
       DOCUMENT_STORAGE_PATH: /app/document-storage
     volumes:
       - document-storage-data:/app/document-storage
@@ -200,25 +207,14 @@ services:
       - "5672"
       - "15672"
 
-  # Ollama runtime for document parsing experiments
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    restart: unless-stopped
-    volumes:
-      - ollama-data:/root/.ollama
-    networks:
-      - fleet-net
-    expose:
-      - "11434"
-
 volumes:
   auth-postgres-data-v2:
+  auth-profile-image-data:
   fleet-postgres-data:
+  fleet-vehicle-image-data:
   document-postgres-data:
   document-storage-data:
   rabbitmq-data:
-  ollama-data:
 
 networks:
   fleet-net:

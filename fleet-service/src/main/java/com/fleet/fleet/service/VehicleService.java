@@ -15,6 +15,7 @@ import com.fleet.fleet.exception.ResourceNotFoundException;
 import com.fleet.fleet.repository.VehicleRepository;
 import com.fleet.fleet.repository.VehicleSpecifications;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.AccessDeniedException;
@@ -22,6 +23,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Locale;
@@ -31,6 +33,7 @@ import java.util.Locale;
 public class VehicleService {
 
     private final VehicleRepository vehicleRepository;
+    private final VehicleImageStorageService imageStorageService;
 
     @Transactional
     public VehicleResponse create(VehicleRequest request, Authentication authentication) {
@@ -148,7 +151,47 @@ public class VehicleService {
     public void delete(Long id, Authentication authentication) {
         Vehicle vehicle = getVehicle(id);
         assertCanWrite(vehicle, authentication);
+        imageStorageService.deleteQuietly(vehicle.getImageStoragePath());
         vehicleRepository.delete(vehicle);
+    }
+
+    @Transactional
+    public VehicleResponse uploadImage(Long id, MultipartFile file, Authentication authentication) {
+        Vehicle vehicle = getVehicle(id);
+        assertCanWrite(vehicle, authentication);
+        StoredVehicleImage image = imageStorageService.save(file);
+        imageStorageService.deleteQuietly(vehicle.getImageStoragePath());
+        vehicle.setImageStoragePath(image.storagePath());
+        vehicle.setImageOriginalFileName(image.originalFileName());
+        vehicle.setImageContentType(image.contentType());
+        vehicle.setImageFileSize(image.fileSize());
+        return toResponse(vehicleRepository.save(vehicle));
+    }
+
+    @Transactional
+    public VehicleResponse deleteImage(Long id, Authentication authentication) {
+        Vehicle vehicle = getVehicle(id);
+        assertCanWrite(vehicle, authentication);
+        imageStorageService.deleteQuietly(vehicle.getImageStoragePath());
+        vehicle.setImageStoragePath(null);
+        vehicle.setImageOriginalFileName(null);
+        vehicle.setImageContentType(null);
+        vehicle.setImageFileSize(null);
+        return toResponse(vehicleRepository.save(vehicle));
+    }
+
+    @Transactional(readOnly = true)
+    public VehicleImageResource loadImage(Long id, Authentication authentication) {
+        Vehicle vehicle = getVehicle(id);
+        assertCanRead(vehicle, authentication);
+        if (!StringUtils.hasText(vehicle.getImageStoragePath())) {
+            throw new ResourceNotFoundException("Vehicle image not found: " + id);
+        }
+        return new VehicleImageResource(
+                imageStorageService.load(vehicle.getImageStoragePath()),
+                vehicle.getImageContentType(),
+                vehicle.getImageOriginalFileName()
+        );
     }
 
     @Transactional(readOnly = true)
@@ -274,9 +317,14 @@ public class VehicleService {
                 vehicle.getAssignedUserId(),
                 vehicle.getAssignedDriverName(),
                 vehicle.getCurrentMileage(),
+                StringUtils.hasText(vehicle.getImageStoragePath()) ? "/api/fleet/vehicles/%d/image".formatted(vehicle.getId()) : null,
+                vehicle.getImageOriginalFileName(),
                 vehicle.getCreatedAt(),
                 vehicle.getUpdatedAt()
         );
+    }
+
+    public record VehicleImageResource(Resource resource, String contentType, String originalFileName) {
     }
 
     private VehicleBasicInfoResponse toBasicInfo(Vehicle vehicle) {

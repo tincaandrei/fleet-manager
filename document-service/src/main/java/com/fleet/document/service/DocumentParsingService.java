@@ -1,6 +1,5 @@
 package com.fleet.document.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -9,23 +8,11 @@ import com.fleet.document.dto.ParserResultRequest;
 import com.fleet.document.entity.DocumentType;
 import com.fleet.document.entity.ParserStatus;
 import com.fleet.document.entity.VehicleDocument;
-import org.apache.pdfbox.Loader;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
 
-import java.io.IOException;
 import java.math.BigDecimal;
-import java.net.SocketTimeoutException;
 import java.text.Normalizer;
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -44,57 +31,50 @@ public class DocumentParsingService {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
 
-    private final DocumentStorageService storageService;
+    private final DocumentTextExtractionService textExtractionService;
+    private final DocumentLlmClient llmClient;
     private final ObjectMapper objectMapper;
-    private final RestClient ollamaClient;
-    private final String model;
     private final String parserName;
     private final String parserVersion;
-    private final int minimumTextLength;
-    private final int goodTextLength;
 
     public DocumentParsingService(
-            DocumentStorageService storageService,
+            DocumentTextExtractionService textExtractionService,
+            DocumentLlmClient llmClient,
             ObjectMapper objectMapper,
-            @Value("${ollama.base-url}") String ollamaBaseUrl,
-            @Value("${ollama.model}") String model,
-            @Value("${ollama.timeout}") Duration timeout,
             @Value("${document.parser.name}") String parserName,
-            @Value("${document.parser.version}") String parserVersion,
-            @Value("${document.parser.minimum-text-length}") int minimumTextLength,
-            @Value("${document.parser.good-text-length}") int goodTextLength
+            @Value("${document.parser.version}") String parserVersion
     ) {
-        this.storageService = storageService;
+        this.textExtractionService = textExtractionService;
+        this.llmClient = llmClient;
         this.objectMapper = objectMapper;
-        this.ollamaClient = RestClient.builder()
-                .baseUrl(ollamaBaseUrl)
-                .requestFactory(requestFactory(timeout))
-                .build();
-        this.model = model;
         this.parserName = parserName;
         this.parserVersion = parserVersion;
-        this.minimumTextLength = minimumTextLength;
-        this.goodTextLength = goodTextLength;
     }
 
     public ParserResultRequest parse(VehicleDocument document) {
         try {
-            TextExtractionResult textExtraction = extractText(document);
-            if (!isReadableEnough(textExtraction.text())) {
-                return failure(document.getId(), "TEXT_EXTRACTION_FAILED", "Could not extract readable text from PDF");
-            }
+            ExtractedTextResult textExtraction = textExtractionService.extractText(document);
 
             DocumentTypeDetection detection = detect(textExtraction.text());
             ExtractionStrategy strategy = strategyFor(detection);
-            JsonNode rawModelData = unwrapExtractedData(extractJson(strategy.buildPrompt(textExtraction.text())));
+            DocumentLlmClient.LlmExtractionResult llmResult = llmClient.extractJson(
+                    strategy.buildPrompt(textExtraction.text()),
+                    strategy.expectedSchema()
+            );
+            JsonNode rawModelData = unwrapExtractedData(llmResult.json());
             NormalizedExtraction normalized = normalizeAndValidate(strategy, rawModelData);
+            List<String> warnings = new ArrayList<>();
+            if (textExtraction.warnings() != null) {
+                warnings.addAll(textExtraction.warnings());
+            }
+            warnings.addAll(normalized.warnings());
 
             BigDecimal confidence = BigDecimal.valueOf(calculateConfidence(
                     strategy.importantFields(),
                     normalized.extractedData(),
                     textExtraction.textQualityScore(),
                     normalized.llmConfidence(),
-                    normalized.warnings()
+                    warnings
             ));
 
             return new ParserResultRequest(
@@ -105,77 +85,19 @@ public class DocumentParsingService {
                     confidence,
                     parserName,
                     parserVersion,
+                    textExtraction.extractionMethod(),
+                    llmResult.usage(),
                     objectMapper.convertValue(normalized.extractedData(), MAP_TYPE),
-                    normalized.warnings(),
+                    warnings,
                     null,
                     null
             );
-        } catch (ParserException exception) {
+        } catch (TextExtractionException exception) {
+            return failure(document.getId(), exception.errorCode(), exception.getMessage());
+        } catch (DocumentLlmException exception) {
             return failure(document.getId(), exception.errorCode(), exception.getMessage());
         } catch (Exception exception) {
             return failure(document.getId(), "INTERNAL_ERROR", "Unexpected document parser error");
-        }
-    }
-
-    private TextExtractionResult extractText(VehicleDocument document) {
-        Resource resource = storageService.load(document.getStoragePath());
-        try {
-            byte[] content = resource.getInputStream().readAllBytes();
-            try (PDDocument pdf = Loader.loadPDF(content)) {
-                PDFTextStripper stripper = new PDFTextStripper();
-                String text = normalizeWhitespace(stripper.getText(pdf));
-                return new TextExtractionResult(text, calculateTextQualityScore(text));
-            }
-        } catch (IOException exception) {
-            throw new ParserException("TEXT_EXTRACTION_FAILED", "Could not extract readable text from PDF", exception);
-        }
-    }
-
-    private JsonNode extractJson(String prompt) {
-        OllamaChatRequest request = new OllamaChatRequest(
-                model,
-                false,
-                "json",
-                List.of(
-                        new OllamaMessage("system", """
-                                You are a strict JSON extraction engine for vehicle document parsing.
-                                Return only JSON. Never invent values. Use null for missing or uncertain fields.
-                                """),
-                        new OllamaMessage("user", prompt)
-                )
-        );
-
-        try {
-            OllamaChatResponse response = ollamaClient.post()
-                    .uri("/api/chat")
-                    .body(request)
-                    .retrieve()
-                    .body(OllamaChatResponse.class);
-            if (response == null || response.message() == null || response.message().content() == null) {
-                throw new ParserException("OLLAMA_INVALID_RESPONSE", "Ollama returned an empty response");
-            }
-            return parseJsonContent(response.message().content());
-        } catch (ResourceAccessException exception) {
-            if (isTimeout(exception)) {
-                throw new ParserException("OLLAMA_TIMEOUT", "Ollama request timed out", exception);
-            }
-            throw new ParserException("OLLAMA_UNAVAILABLE", "Ollama is unavailable", exception);
-        } catch (RestClientException exception) {
-            throw new ParserException("OLLAMA_UNAVAILABLE", "Ollama request failed", exception);
-        }
-    }
-
-    private JsonNode parseJsonContent(String content) {
-        String candidate = stripMarkdownFence(content.trim());
-        int firstBrace = candidate.indexOf('{');
-        int lastBrace = candidate.lastIndexOf('}');
-        if (firstBrace >= 0 && lastBrace > firstBrace) {
-            candidate = candidate.substring(firstBrace, lastBrace + 1);
-        }
-        try {
-            return objectMapper.readTree(candidate);
-        } catch (JsonProcessingException exception) {
-            throw new ParserException("OLLAMA_INVALID_RESPONSE", "Ollama returned invalid JSON", exception);
         }
     }
 
@@ -334,6 +256,8 @@ public class DocumentParsingService {
                 parserName,
                 parserVersion,
                 null,
+                null,
+                null,
                 List.of(errorMessage),
                 errorCode,
                 errorMessage
@@ -361,35 +285,6 @@ public class DocumentParsingService {
         double llmScore = llmConfidence >= 0.0 && llmConfidence <= 1.0 ? llmConfidence : 0.5;
         double confidence = (0.45 * fieldScore) + (0.25 * validationScore) + 0.15 + (0.10 * textQualityScore) + (0.05 * llmScore);
         return Math.round(clamp(confidence) * 100.0) / 100.0;
-    }
-
-    private String normalizeWhitespace(String text) {
-        if (text == null) {
-            return "";
-        }
-        return text.replace('\u00A0', ' ')
-                .replaceAll("[\\t\\x0B\\f\\r]+", " ")
-                .replaceAll(" +", " ")
-                .replaceAll("\\n{3,}", "\n\n")
-                .trim();
-    }
-
-    private boolean isReadableEnough(String text) {
-        return text != null && text.length() >= minimumTextLength;
-    }
-
-    private double calculateTextQualityScore(String text) {
-        if (text == null || text.isBlank()) {
-            return 0.0;
-        }
-        int lengthScoreBase = Math.min(text.length(), goodTextLength);
-        double lengthScore = (double) lengthScoreBase / goodTextLength;
-        long usefulCharacters = text.chars()
-                .filter(character -> Character.isLetterOrDigit(character) || Character.isWhitespace(character))
-                .count();
-        double usefulRatio = (double) usefulCharacters / text.length();
-        double replacementPenalty = text.contains("\uFFFD") ? 0.15 : 0.0;
-        return clamp((lengthScore * 0.65) + (usefulRatio * 0.35) - replacementPenalty);
     }
 
     private String normalizeForDetection(String value) {
@@ -492,39 +387,8 @@ public class DocumentParsingService {
         return 0.5;
     }
 
-    private String stripMarkdownFence(String content) {
-        if (content.startsWith("```")) {
-            return content.replaceFirst("^```(?:json)?\\s*", "")
-                    .replaceFirst("\\s*```$", "")
-                    .trim();
-        }
-        return content;
-    }
-
-    private boolean isTimeout(Throwable throwable) {
-        Throwable current = throwable;
-        while (current != null) {
-            if (current instanceof SocketTimeoutException) {
-                return true;
-            }
-            current = current.getCause();
-        }
-        return false;
-    }
-
     private double clamp(double value) {
         return Math.max(0.0, Math.min(1.0, value));
-    }
-
-    private SimpleClientHttpRequestFactory requestFactory(Duration timeout) {
-        int timeoutMillis = (int) Math.min(Integer.MAX_VALUE, Math.max(1, timeout.toMillis()));
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(timeoutMillis);
-        factory.setReadTimeout(timeoutMillis);
-        return factory;
-    }
-
-    private record TextExtractionResult(String text, double textQualityScore) {
     }
 
     record DocumentTypeDetection(DocumentType documentType, String subtype) {
@@ -576,35 +440,4 @@ public class DocumentParsingService {
         }
     }
 
-    private record OllamaChatRequest(
-            String model,
-            boolean stream,
-            String format,
-            List<OllamaMessage> messages
-    ) {
-    }
-
-    private record OllamaMessage(String role, String content) {
-    }
-
-    private record OllamaChatResponse(OllamaMessage message) {
-    }
-
-    private static class ParserException extends RuntimeException {
-        private final String errorCode;
-
-        ParserException(String errorCode, String message) {
-            super(message);
-            this.errorCode = errorCode;
-        }
-
-        ParserException(String errorCode, String message, Throwable cause) {
-            super(message, cause);
-            this.errorCode = errorCode;
-        }
-
-        String errorCode() {
-            return errorCode;
-        }
-    }
 }

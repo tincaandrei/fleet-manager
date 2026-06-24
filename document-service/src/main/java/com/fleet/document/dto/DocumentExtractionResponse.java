@@ -1,6 +1,7 @@
 package com.fleet.document.dto;
 
 import com.fleet.document.entity.ParserStatus;
+import com.fleet.document.entity.TextExtractionMethod;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
@@ -16,6 +17,8 @@ public record DocumentExtractionResponse(
         List<String> warnings,
         String parserName,
         String parserVersion,
+        TextExtractionMethod extractionMethod,
+        LlmUsageDto llmUsage,
         ParserStatus parserStatus,
         String errorCode,
         String errorMessage

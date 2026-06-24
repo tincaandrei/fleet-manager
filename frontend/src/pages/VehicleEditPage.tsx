@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getVehicle, updateVehicle } from '../api/vehicleApi';
+import { getVehicle, updateVehicle, uploadVehicleImage } from '../api/vehicleApi';
 import type { Vehicle, VehicleRequest } from '../types/vehicle';
 import VehicleForm from '../components/VehicleForm';
 import PageShell from '../components/ui/PageShell';
@@ -15,6 +15,7 @@ export default function VehicleEditPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -31,6 +32,9 @@ export default function VehicleEditPage() {
     setSubmitError(null);
     try {
       await updateVehicle(Number(id), data);
+      if (imageFile) {
+        await uploadVehicleImage(Number(id), imageFile);
+      }
       navigate(`/vehicles/${id}`);
     } catch (err: unknown) {
       setSubmitError(getApiErrorMessage(err, 'Failed to update vehicle.'));
@@ -53,6 +57,9 @@ export default function VehicleEditPage() {
             loading={loading}
             error={submitError}
             submitLabel="Save Changes"
+            currentVehicle={vehicle}
+            imageFile={imageFile}
+            onImageFileChange={setImageFile}
           />
         )}
     </PageShell>

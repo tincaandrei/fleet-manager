@@ -16,7 +16,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableWebSecurity
-@EnableConfigurationProperties(JwtProperties.class)
+@EnableConfigurationProperties({JwtProperties.class, VehicleImageStorageProperties.class})
 public class SecurityConfig {
 
     @Bean
@@ -28,6 +28,9 @@ public class SecurityConfig {
                         .requestMatchers("/internal/vehicles/**").hasAnyRole("SUPERADMIN", "BUSINESS_ADMIN", "EMPLOYEE")
                         .requestMatchers(HttpMethod.GET, "/vehicles", "/vehicles/**").hasAnyRole("SUPERADMIN", "BUSINESS_ADMIN", "EMPLOYEE")
                         .requestMatchers(HttpMethod.POST, "/vehicles").hasAnyRole("SUPERADMIN", "BUSINESS_ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/vehicles/*/image").hasAnyRole("SUPERADMIN", "BUSINESS_ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/vehicles/*/image").hasAnyRole("SUPERADMIN", "BUSINESS_ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/vehicles/**").hasAnyRole("SUPERADMIN", "BUSINESS_ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/vehicles/**").hasAnyRole("SUPERADMIN", "BUSINESS_ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/vehicles/**").hasAnyRole("SUPERADMIN", "BUSINESS_ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/vehicles/**").hasAnyRole("SUPERADMIN", "BUSINESS_ADMIN")

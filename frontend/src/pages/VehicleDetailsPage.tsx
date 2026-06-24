@@ -1,14 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { deleteVehicle, getVehicle } from '../api/vehicleApi';
+import { deleteVehicle, deleteVehicleImage, getVehicle, uploadVehicleImage } from '../api/vehicleApi';
 import type { Vehicle } from '../types/vehicle';
 import { useAuth } from '../auth/useAuth';
 import VehicleDocumentsSection from '../components/VehicleDocumentsSection';
 import ComplianceSection from '../components/ComplianceSection';
+import VehicleImage from '../components/VehicleImage';
 import PageShell from '../components/ui/PageShell';
 import DataState from '../components/ui/DataState';
 import StatusBadge from '../components/ui/StatusBadge';
+import { Button } from '../components/ui/Button';
 import { getApiErrorMessage } from '../utils/apiError';
+import { showToast } from '../utils/toast';
 
 type Tab = 'details' | 'documents' | 'compliance';
 
@@ -19,6 +22,10 @@ export default function VehicleDetailsPage() {
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageSaving, setImageSaving] = useState(false);
+  const [isImageOpen, setIsImageOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('details');
 
   useEffect(() => {
@@ -44,6 +51,52 @@ export default function VehicleDetailsPage() {
     }
   };
 
+  const closeImageModal = () => {
+    if (imageSaving) return;
+    setIsImageOpen(false);
+    setImageFile(null);
+    setImageError(null);
+  };
+
+  const handleImageUpload = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!vehicle || !imageFile) {
+      setImageError('Choose an image first.');
+      return;
+    }
+
+    setImageSaving(true);
+    setImageError(null);
+    try {
+      const res = await uploadVehicleImage(vehicle.id, imageFile);
+      setVehicle(res.data);
+      setImageFile(null);
+      setIsImageOpen(false);
+      showToast({ type: 'success', message: 'Vehicle image updated.' });
+    } catch (err: unknown) {
+      setImageError(getApiErrorMessage(err, 'Failed to update vehicle image.'));
+    } finally {
+      setImageSaving(false);
+    }
+  };
+
+  const handleImageDelete = async () => {
+    if (!vehicle) return;
+    setImageSaving(true);
+    setImageError(null);
+    try {
+      const res = await deleteVehicleImage(vehicle.id);
+      setVehicle(res.data);
+      setImageFile(null);
+      setIsImageOpen(false);
+      showToast({ type: 'success', message: 'Vehicle image removed.' });
+    } catch (err: unknown) {
+      setImageError(getApiErrorMessage(err, 'Failed to remove vehicle image.'));
+    } finally {
+      setImageSaving(false);
+    }
+  };
+
   return (
     <PageShell>
         <div className="page-header">
@@ -66,6 +119,17 @@ export default function VehicleDetailsPage() {
         {vehicle && (
           <>
             <section className="detail-summary" aria-label="Vehicle summary">
+              <button
+                type="button"
+                className="detail-image-trigger"
+                onClick={() => {
+                  setImageError(null);
+                  setIsImageOpen(true);
+                }}
+                aria-label={`Open ${vehicle.licensePlate} image`}
+              >
+                <VehicleImage vehicle={vehicle} className="detail-vehicle-image" />
+              </button>
               <div className="detail-hero">
                 <h2>{vehicle.brand} {vehicle.model}</h2>
                 <StatusBadge status={vehicle.status} />
@@ -136,6 +200,60 @@ export default function VehicleDetailsPage() {
 
             {activeTab === 'compliance' && (
               <ComplianceSection vehicleId={vehicle.id} />
+            )}
+
+            {isImageOpen && (
+              <div className="modal-backdrop" role="presentation" onMouseDown={closeImageModal}>
+                <section
+                  className="image-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="vehicle-image-title"
+                  onMouseDown={(event) => event.stopPropagation()}
+                >
+                  <div className="modal-header">
+                    <h2 id="vehicle-image-title">{vehicle.licensePlate} Image</h2>
+                    <button type="button" className="modal-close" onClick={closeImageModal} aria-label="Close">
+                      x
+                    </button>
+                  </div>
+                  <div className="image-modal-body">
+                    <VehicleImage vehicle={vehicle} className="image-modal-vehicle" />
+                    {isAdmin && (
+                      <form className="profile-image-form" onSubmit={handleImageUpload}>
+                        <label className="profile-image-picker">
+                          Change image
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            onChange={(event) => setImageFile(event.target.files?.[0] ?? null)}
+                          />
+                        </label>
+                        {imageFile && <span className="profile-image-file-name">{imageFile.name}</span>}
+                        {imageError && <p className="error modal-message">{imageError}</p>}
+                        <div className="profile-image-actions">
+                          <Button type="submit" disabled={imageSaving || !imageFile}>
+                            {imageSaving ? 'Uploading...' : 'Upload'}
+                          </Button>
+                          {vehicle.imageUrl && (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              disabled={imageSaving}
+                              onClick={handleImageDelete}
+                            >
+                              Remove
+                            </Button>
+                          )}
+                        </div>
+                      </form>
+                    )}
+                    {!isAdmin && (
+                      <p className="image-modal-note">Only administrators can change vehicle images.</p>
+                    )}
+                  </div>
+                </section>
+              </div>
             )}
           </>
         )}
