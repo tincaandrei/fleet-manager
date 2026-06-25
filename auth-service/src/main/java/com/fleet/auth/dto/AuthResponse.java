@@ -9,6 +9,8 @@ public record AuthResponse(
         String token,
         @Schema(description = "Authenticated username.", example = "alice")
         String username,
+        @Schema(description = "Authenticated email.", example = "alice@example.com")
+        String email,
         @Schema(description = "Current role embedded in the token.", example = "USER")
         Role role,
         Long userId,

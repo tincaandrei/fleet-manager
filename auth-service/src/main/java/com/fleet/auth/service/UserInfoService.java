@@ -2,6 +2,8 @@ package com.fleet.auth.service;
 
 import com.fleet.auth.config.BootstrapAdminProperties;
 import com.fleet.auth.dto.AssignBusinessUserRequest;
+import com.fleet.auth.dto.AdminCreateUserRequest;
+import com.fleet.auth.dto.AdminUserResponse;
 import com.fleet.auth.dto.BusinessRequest;
 import com.fleet.auth.dto.BusinessResponse;
 import com.fleet.auth.dto.CreateBusinessUserRequest;
@@ -9,11 +11,14 @@ import com.fleet.auth.entity.Credential;
 import com.fleet.auth.dto.MeResponse;
 import com.fleet.auth.dto.RegisterRequest;
 import com.fleet.auth.dto.UpdateUserRequest;
+import com.fleet.auth.dto.UpdateUserStatusRequest;
 import com.fleet.auth.dto.UserLookupResponse;
 import com.fleet.auth.entity.Business;
 import com.fleet.auth.entity.Role;
 import com.fleet.auth.entity.RoleEntity;
 import com.fleet.auth.entity.UserData;
+import com.fleet.auth.entity.UserStatus;
+import com.fleet.auth.exception.ApiStatusException;
 import com.fleet.auth.exception.DuplicateUserException;
 import com.fleet.auth.exception.ResourceNotFoundException;
 import com.fleet.auth.repository.CredentialRepository;
@@ -22,6 +27,7 @@ import com.fleet.auth.repository.RoleEntityRepository;
 import com.fleet.auth.repository.UserDataRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -49,11 +55,14 @@ public class UserInfoService implements UserDetailsService {
     private final RoleEntityRepository roleEntityRepository;
     private final UserDataRepository userDataRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UserInvitationService userInvitationService;
 
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        Credential credential = credentialRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
+    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+        String normalizedEmail = normalizeEmail(email);
+        Credential credential = credentialRepository.findByEmailIgnoreCase(normalizedEmail)
+                .or(() -> credentialRepository.findByUsername(email))
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + normalizedEmail));
         return new CredentialDetails(credential);
     }
 
@@ -62,15 +71,19 @@ public class UserInfoService implements UserDetailsService {
         validateUniqueUser(registerRequest.username(), registerRequest.email());
 
         Credential credential = Credential.builder()
-                .username(registerRequest.username().trim())
+                .username(normalizeOptional(registerRequest.username()))
+                .email(normalizeEmail(registerRequest.email()))
                 .passwordHash(passwordEncoder.encode(registerRequest.password()))
                 .role(getOrCreateRole(Role.EMPLOYEE))
+                .status(UserStatus.ACTIVE)
+                .enabled(true)
+                .passwordChangeRequired(false)
                 .build();
         Credential savedCredential = credentialRepository.save(credential);
 
         UserData userData = UserData.builder()
                 .credential(savedCredential)
-                .email(registerRequest.email().trim())
+                .email(normalizeEmail(registerRequest.email()))
                 .phone(normalizeOptional(registerRequest.phone()))
                 .address(normalizeOptional(registerRequest.address()))
                 .business(null)
@@ -140,15 +153,19 @@ public class UserInfoService implements UserDetailsService {
         }
 
         Credential credential = Credential.builder()
-                .username(request.username().trim())
+                .username(normalizeOptional(request.username()))
+                .email(normalizeEmail(request.email()))
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .role(getOrCreateRole(request.role()))
+                .status(UserStatus.ACTIVE)
+                .enabled(true)
+                .passwordChangeRequired(false)
                 .build();
         Credential savedCredential = credentialRepository.save(credential);
 
         UserData userData = UserData.builder()
                 .credential(savedCredential)
-                .email(request.email().trim())
+                .email(normalizeEmail(request.email()))
                 .phone(normalizeOptional(request.phone()))
                 .address(normalizeOptional(request.address()))
                 .business(business)
@@ -176,7 +193,7 @@ public class UserInfoService implements UserDetailsService {
     @Transactional(readOnly = true)
     public List<MeResponse> listBusinessUsers(Long businessId, Authentication authentication) {
         requireCanManageBusiness(businessId, authentication);
-        return userDataRepository.findByBusinessIdOrderByCredentialUsernameAsc(businessId).stream()
+        return userDataRepository.findByBusinessIdOrderByCredentialEmailAsc(businessId).stream()
                 .map(this::toMeResponse)
                 .toList();
     }
@@ -184,10 +201,94 @@ public class UserInfoService implements UserDetailsService {
     @Transactional(readOnly = true)
     public List<MeResponse> listUnassignedUsers(Authentication authentication) {
         requireSuperadmin(authentication);
-        return userDataRepository.findByBusinessIsNullOrderByCredentialUsernameAsc().stream()
+        return userDataRepository.findByBusinessIsNullOrderByCredentialEmailAsc().stream()
                 .filter(userData -> userData.getCredential().getRole().getRoleName().canonical() != Role.SUPERADMIN)
                 .map(this::toMeResponse)
                 .toList();
+    }
+
+    @Transactional
+    public AdminUserResponse createInvitedUser(AdminCreateUserRequest request, Authentication authentication) {
+        requireAdmin(authentication);
+        Role role = singleCanonicalRole(request.roles());
+        if (role == Role.SUPERADMIN && !hasRole(authentication, Role.SUPERADMIN)) {
+            throw new AccessDeniedException("Access denied");
+        }
+
+        String email = normalizeEmail(request.email());
+        if (credentialRepository.existsByEmailIgnoreCase(email) || userDataRepository.existsByEmail(email)) {
+            throw new ApiStatusException(HttpStatus.CONFLICT, "EMAIL_ALREADY_EXISTS");
+        }
+
+        Business business = null;
+        if (hasRole(authentication, Role.SUPERADMIN)) {
+            if (request.businessId() != null) {
+                business = getBusinessEntity(request.businessId());
+                if (!business.isActive()) {
+                    throw new IllegalArgumentException("Organization is inactive");
+                }
+            }
+        } else {
+            Long businessId = currentBusinessId(authentication);
+            if (businessId == null) {
+                throw new AccessDeniedException("Access denied");
+            }
+            business = getBusinessEntity(businessId);
+            if (!business.isActive()) {
+                throw new IllegalArgumentException("Organization is inactive");
+            }
+        }
+
+        Credential credential = Credential.builder()
+                .username(null)
+                .email(email)
+                .passwordHash(passwordEncoder.encode(generatePlaceholderPassword()))
+                .role(getOrCreateRole(role))
+                .status(UserStatus.INVITED)
+                .enabled(false)
+                .passwordChangeRequired(true)
+                .build();
+        Credential savedCredential = credentialRepository.save(credential);
+
+        UserData userData = UserData.builder()
+                .credential(savedCredential)
+                .email(email)
+                .firstName(normalizeRequired(request.firstName()))
+                .lastName(normalizeRequired(request.lastName()))
+                .business(business)
+                .build();
+        UserData savedUserData = userDataRepository.save(userData);
+        savedCredential.setUserData(savedUserData);
+
+        userInvitationService.createAndSendInvitation(savedUserData, currentUserId(authentication));
+        return toAdminUserResponse(savedUserData);
+    }
+
+    @Transactional
+    public AdminUserResponse resendInvite(Long userId, Authentication authentication) {
+        requireAdmin(authentication);
+        UserData userData = getUserData(userId);
+        requireCanManageUser(userData, authentication);
+        userInvitationService.resendInvitation(userData, currentUserId(authentication));
+        return toAdminUserResponse(userData);
+    }
+
+    @Transactional
+    public AdminUserResponse updateUserStatus(Long userId, UpdateUserStatusRequest request, Authentication authentication) {
+        requireAdmin(authentication);
+        if (request.status() == UserStatus.INVITED) {
+            throw new IllegalArgumentException("INVITED status cannot be set manually");
+        }
+        UserData userData = getUserData(userId);
+        requireCanManageUser(userData, authentication);
+        Credential credential = userData.getCredential();
+        credential.setStatus(request.status());
+        credential.setEnabled(request.status() == UserStatus.ACTIVE);
+        if (request.status() == UserStatus.DISABLED) {
+            credential.setPasswordChangeRequired(false);
+        }
+        credentialRepository.save(credential);
+        return toAdminUserResponse(userData);
     }
 
     @Transactional(readOnly = true)
@@ -240,15 +341,33 @@ public class UserInfoService implements UserDetailsService {
     }
 
     @Transactional(readOnly = true)
-    public MeResponse getCurrentUser(String username) {
-        UserData userData = userDataRepository.findByCredentialUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
+    public MeResponse getCurrentUser(String email) {
+        UserData userData = findUserByAuthenticationName(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + email));
         return toMeResponse(userData);
+    }
+
+    @Transactional(readOnly = true)
+    public void assertCanLogin(String email) {
+        credentialRepository.findByEmailIgnoreCase(normalizeEmail(email))
+                .or(() -> credentialRepository.findByUsername(email))
+                .ifPresent(credential -> {
+            UserStatus status = credential.getStatus() == null ? UserStatus.ACTIVE : credential.getStatus();
+            if (status == UserStatus.INVITED) {
+                throw new ApiStatusException(HttpStatus.FORBIDDEN, "INVITATION_NOT_ACCEPTED");
+            }
+            if (status == UserStatus.DISABLED || Boolean.FALSE.equals(credential.getEnabled())) {
+                throw new ApiStatusException(HttpStatus.FORBIDDEN, "ACCOUNT_DISABLED");
+            }
+            if (Boolean.TRUE.equals(credential.getPasswordChangeRequired())) {
+                throw new ApiStatusException(HttpStatus.FORBIDDEN, "INVITATION_NOT_ACCEPTED");
+            }
+        });
     }
 
     @Transactional
     public MeResponse updateCurrentUser(UpdateUserRequest request, Authentication authentication) {
-        UserData userData = userDataRepository.findByCredentialUsername(authentication.getName())
+        UserData userData = findUserByAuthenticationName(authentication.getName())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + authentication.getName()));
         applyUserUpdate(userData, request);
         return toMeResponse(userDataRepository.save(userData));
@@ -256,7 +375,7 @@ public class UserInfoService implements UserDetailsService {
 
     @Transactional
     public MeResponse uploadCurrentUserProfileImage(MultipartFile file, Authentication authentication) {
-        UserData userData = userDataRepository.findByCredentialUsername(authentication.getName())
+        UserData userData = findUserByAuthenticationName(authentication.getName())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + authentication.getName()));
         StoredProfileImage image = profileImageStorageService.save(file);
         profileImageStorageService.deleteQuietly(userData.getProfileImageStoragePath());
@@ -269,7 +388,7 @@ public class UserInfoService implements UserDetailsService {
 
     @Transactional
     public MeResponse deleteCurrentUserProfileImage(Authentication authentication) {
-        UserData userData = userDataRepository.findByCredentialUsername(authentication.getName())
+        UserData userData = findUserByAuthenticationName(authentication.getName())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + authentication.getName()));
         profileImageStorageService.deleteQuietly(userData.getProfileImageStoragePath());
         userData.setProfileImageStoragePath(null);
@@ -281,7 +400,7 @@ public class UserInfoService implements UserDetailsService {
 
     @Transactional(readOnly = true)
     public ProfileImageResource loadCurrentUserProfileImage(Authentication authentication) {
-        UserData userData = userDataRepository.findByCredentialUsername(authentication.getName())
+        UserData userData = findUserByAuthenticationName(authentication.getName())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + authentication.getName()));
         return loadProfileImage(userData);
     }
@@ -336,18 +455,23 @@ public class UserInfoService implements UserDetailsService {
             throw new IllegalStateException("Bootstrap admin username, email, and password must all be provided");
         }
 
-        Optional<Credential> byUsername = credentialRepository.findByUsername(bootstrapAdminProperties.getUsername());
-        Optional<UserData> byEmail = userDataRepository.findByEmail(bootstrapAdminProperties.getEmail());
+        String bootstrapEmail = normalizeEmail(bootstrapAdminProperties.getEmail());
+        Optional<Credential> byCredentialEmail = credentialRepository.findByEmailIgnoreCase(bootstrapEmail);
+        Optional<UserData> byEmail = userDataRepository.findByEmail(bootstrapEmail);
 
-        if (byUsername.isPresent() && byEmail.isPresent()
-                && !byUsername.get().getCredentialId().equals(byEmail.get().getCredential().getCredentialId())) {
-            throw new IllegalStateException("Bootstrap admin username and email refer to different users");
+        if (byCredentialEmail.isPresent() && byEmail.isPresent()
+                && !byCredentialEmail.get().getCredentialId().equals(byEmail.get().getCredential().getCredentialId())) {
+            throw new IllegalStateException("Bootstrap credential email and profile email refer to different users");
         }
 
-        Credential credential = byUsername.orElseGet(() -> byEmail.map(UserData::getCredential).orElseGet(Credential::new));
-        credential.setUsername(bootstrapAdminProperties.getUsername());
+        Credential credential = byCredentialEmail.orElseGet(() -> byEmail.map(UserData::getCredential).orElseGet(Credential::new));
+        credential.setUsername(normalizeOptional(bootstrapAdminProperties.getUsername()));
+        credential.setEmail(bootstrapEmail);
         credential.setPasswordHash(passwordEncoder.encode(bootstrapAdminProperties.getPassword()));
         credential.setRole(getOrCreateRole(Role.SUPERADMIN));
+        credential.setStatus(UserStatus.ACTIVE);
+        credential.setEnabled(true);
+        credential.setPasswordChangeRequired(false);
         Credential savedCredential = credentialRepository.save(credential);
 
         UserData userData = savedCredential.getUserData();
@@ -355,17 +479,28 @@ public class UserInfoService implements UserDetailsService {
             userData = byEmail.orElseGet(UserData::new);
         }
         userData.setCredential(savedCredential);
-        userData.setEmail(bootstrapAdminProperties.getEmail());
+        userData.setEmail(bootstrapEmail);
         userDataRepository.save(userData);
     }
 
     private void validateUniqueUser(String username, String email) {
-        if (credentialRepository.existsByUsername(username)) {
+        if (StringUtils.hasText(username) && credentialRepository.existsByUsername(username.trim())) {
             throw new DuplicateUserException("Username is already taken");
         }
-        if (userDataRepository.existsByEmail(email)) {
+        if (credentialRepository.existsByEmailIgnoreCase(normalizeEmail(email)) || userDataRepository.existsByEmail(normalizeEmail(email))) {
             throw new DuplicateUserException("Email is already taken");
         }
+    }
+
+    private Role singleCanonicalRole(Set<Role> roles) {
+        Set<Role> normalized = Role.normalize(roles);
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException("At least one role is required");
+        }
+        if (normalized.size() > 1) {
+            throw new IllegalArgumentException("Only one role is supported");
+        }
+        return normalized.iterator().next();
     }
 
     private UserData getUserData(Long userId) {
@@ -377,14 +512,31 @@ public class UserInfoService implements UserDetailsService {
         if (request == null) {
             throw new IllegalArgumentException("Request body is required");
         }
+        if (request.username() != null) {
+            String username = normalizeOptional(request.username());
+            if (StringUtils.hasText(username)) {
+                credentialRepository.findByUsername(username)
+                        .filter(existing -> !existing.getCredentialId().equals(userData.getCredential().getCredentialId()))
+                        .ifPresent(existing -> {
+                            throw new DuplicateUserException("Username is already taken");
+                        });
+            }
+            userData.getCredential().setUsername(username);
+        }
         if (StringUtils.hasText(request.email())) {
-            String email = request.email().trim();
+            String email = normalizeEmail(request.email());
             userDataRepository.findByEmail(email)
                     .filter(existing -> !existing.getUserId().equals(userData.getUserId()))
                     .ifPresent(existing -> {
                         throw new DuplicateUserException("Email is already taken");
                     });
+            credentialRepository.findByEmailIgnoreCase(email)
+                    .filter(existing -> !existing.getCredentialId().equals(userData.getCredential().getCredentialId()))
+                    .ifPresent(existing -> {
+                        throw new DuplicateUserException("Email is already taken");
+                    });
             userData.setEmail(email);
+            userData.getCredential().setEmail(email);
         }
         userData.setPhone(normalizeOptional(request.phone()));
         userData.setAddress(normalizeOptional(request.address()));
@@ -400,6 +552,12 @@ public class UserInfoService implements UserDetailsService {
 
     private void requireSuperadmin(Authentication authentication) {
         if (!hasRole(authentication, Role.SUPERADMIN)) {
+            throw new AccessDeniedException("Access denied");
+        }
+    }
+
+    private void requireAdmin(Authentication authentication) {
+        if (!hasRole(authentication, Role.SUPERADMIN) && !hasRole(authentication, Role.BUSINESS_ADMIN)) {
             throw new AccessDeniedException("Access denied");
         }
     }
@@ -457,7 +615,7 @@ public class UserInfoService implements UserDetailsService {
         if (authentication.getPrincipal() instanceof CredentialDetails details) {
             return details.getBusinessId();
         }
-        return userDataRepository.findByCredentialUsername(authentication.getName())
+        return findUserByAuthenticationName(authentication.getName())
                 .map(UserData::getBusiness)
                 .map(Business::getId)
                 .orElse(null);
@@ -470,9 +628,15 @@ public class UserInfoService implements UserDetailsService {
         if (authentication.getPrincipal() instanceof CredentialDetails details) {
             return details.getUserId();
         }
-        return userDataRepository.findByCredentialUsername(authentication.getName())
+        return findUserByAuthenticationName(authentication.getName())
                 .map(UserData::getUserId)
                 .orElse(null);
+    }
+
+    private Optional<UserData> findUserByAuthenticationName(String authenticationName) {
+        return userDataRepository.findByCredentialEmailIgnoreCase(authenticationName)
+                .or(() -> userDataRepository.findByEmail(authenticationName))
+                .or(() -> userDataRepository.findByCredentialUsername(authenticationName));
     }
 
     private Business getBusinessEntity(Long businessId) {
@@ -505,6 +669,7 @@ public class UserInfoService implements UserDetailsService {
                 userData.getPhone(),
                 userData.getAddress(),
                 userData.getCredential().getRole().getRoleName().canonical(),
+                userData.getCredential().getStatus() == null ? UserStatus.ACTIVE : userData.getCredential().getStatus(),
                 business == null ? null : business.getId(),
                 business == null ? null : business.getName(),
                 profileImageUrl,
@@ -521,6 +686,27 @@ public class UserInfoService implements UserDetailsService {
                 business == null ? null : business.getId(),
                 userData.getCredential().getRole().getRoleName().canonical()
         );
+    }
+
+    private AdminUserResponse toAdminUserResponse(UserData userData) {
+        Credential credential = userData.getCredential();
+        UserStatus status = credential.getStatus() == null ? UserStatus.ACTIVE : credential.getStatus();
+        Business business = userData.getBusiness();
+        return new AdminUserResponse(
+                userData.getUserId(),
+                userData.getEmail(),
+                userData.getFirstName(),
+                userData.getLastName(),
+                Set.of(credential.getRole().getRoleName().canonical()),
+                status,
+                !Boolean.FALSE.equals(credential.getEnabled()),
+                Boolean.TRUE.equals(credential.getPasswordChangeRequired()),
+                business == null ? null : business.getId()
+        );
+    }
+
+    private String generatePlaceholderPassword() {
+        return java.util.UUID.randomUUID().toString() + "-INVITED";
     }
 
     public record ProfileImageResource(Resource resource, String contentType, String originalFileName) {
@@ -550,4 +736,9 @@ public class UserInfoService implements UserDetailsService {
     private String normalizeOptional(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
     }
+
+    private String normalizeEmail(String value) {
+        return normalizeRequired(value).toLowerCase(java.util.Locale.ROOT);
+    }
 }
+

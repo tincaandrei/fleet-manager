@@ -8,9 +8,13 @@ import type {
   BusinessRequest,
   BusinessUser,
   AssignBusinessUserRequest,
-  CreateBusinessUserRequest,
+  InviteUserRequest,
+  AdminUserResponse,
+  AcceptInviteRequest,
+  InviteValidationResponse,
   UpdateRoleRequest,
   UpdateUserRequest,
+  UserStatus,
 } from '../types/auth';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -20,6 +24,12 @@ export const login = (data: LoginRequest) =>
 
 export const register = (data: RegisterRequest) =>
   api.post('/api/auth/register', data);
+
+export const validateInvitation = (token: string) =>
+  api.get<InviteValidationResponse>('/api/auth/invitations/validate', { params: { token } });
+
+export const acceptInvitation = (data: AcceptInviteRequest) =>
+  api.post('/api/auth/accept-invite', data);
 
 export const getMe = () =>
   api.get<UserProfile>('/api/auth/users/me');
@@ -69,8 +79,14 @@ export const updateBusiness = (businessId: number, data: BusinessRequest) =>
 export const listBusinessUsers = (businessId: number) =>
   api.get<BusinessUser[]>(`/api/auth/businesses/${businessId}/users`);
 
-export const createBusinessUser = (businessId: number, data: CreateBusinessUserRequest) =>
-  api.post<BusinessUser>(`/api/auth/businesses/${businessId}/users`, data);
+export const inviteUser = (data: InviteUserRequest) =>
+  api.post<AdminUserResponse>('/api/auth/admin/users', data);
+
+export const resendUserInvite = (userId: number) =>
+  api.post<AdminUserResponse>(`/api/auth/admin/users/${userId}/resend-invite`);
+
+export const updateAdminUserStatus = (userId: number, status: UserStatus) =>
+  api.patch<AdminUserResponse>(`/api/auth/admin/users/${userId}/status`, { status });
 
 export const updateBusinessUser = (businessId: number, userId: number, data: UpdateUserRequest) =>
   api.put<BusinessUser>(`/api/auth/businesses/${businessId}/users/${userId}`, data);

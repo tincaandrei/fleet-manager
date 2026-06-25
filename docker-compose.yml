@@ -72,13 +72,22 @@ services:
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD in .env}
       PROFILE_IMAGE_STORAGE_PATH: /app/profile-images
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      INVITATION_EXPIRY_HOURS: ${INVITATION_EXPIRY_HOURS:-24}
+      MAIL_HOST: ${MAIL_HOST:?Set MAIL_HOST in .env}
+      MAIL_PORT: ${MAIL_PORT:?Set MAIL_PORT in .env}
+      MAIL_USERNAME: ${MAIL_USERNAME:?Set MAIL_USERNAME in .env}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:?Set MAIL_PASSWORD in .env}
+      MAIL_FROM: ${MAIL_FROM:?Set MAIL_FROM in .env}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-true}
+      MAIL_SMTP_STARTTLS_ENABLE: ${MAIL_SMTP_STARTTLS_ENABLE:-true}
+      MAIL_DEBUG: ${MAIL_DEBUG:-false}
     volumes:
       - auth-profile-image-data:/app/profile-images
     networks:
       - fleet-net
     expose:
       - "8080"
-
   # Fleet Service
   fleet-postgres:
     image: postgres:16-alpine

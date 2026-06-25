@@ -1031,6 +1031,8 @@ button[type='submit']:disabled {
 }
 
 .status-ACTIVE         { background: #d1fae5; color: #065f46; }
+.status-INVITED        { background: #dbeafe; color: #1e40af; }
+.status-DISABLED       { background: #fee2e2; color: #991b1b; }
 .status-IN_SERVICE     { background: #fef9c3; color: #92400e; }
 .status-INACTIVE       { background: #f3f4f6; color: #6b7280; }
 .status-SOLD           { background: #dbeafe; color: #1e40af; }

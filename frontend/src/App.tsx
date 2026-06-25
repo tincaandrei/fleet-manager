@@ -3,6 +3,7 @@ import { AuthProvider } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import AcceptInvitePage from './pages/AcceptInvitePage';
 import ProfilePage from './pages/ProfilePage';
 import VehiclesPage from './pages/VehiclesPage';
 import VehicleDetailsPage from './pages/VehicleDetailsPage';
@@ -32,6 +33,7 @@ export default function App() {
             {/* Public */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/accept-invite" element={<AcceptInvitePage />} />
             <Route path="/" element={<RoleHomeRedirect />} />
 
             {/* All authenticated users */}

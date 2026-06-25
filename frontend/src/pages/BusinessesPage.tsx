@@ -176,7 +176,7 @@ function PendingAccountRow({ user, businesses, onAssigned }: PendingAccountRowPr
 
   return (
     <tr>
-      <td data-label="Username">{user.username}</td>
+      <td data-label="Username">{user.username || '-'}</td>
       <td data-label="Email">{user.email}</td>
       <td data-label="Phone">{user.phone || '-'}</td>
       <td data-label="Assign Organization">
@@ -185,7 +185,7 @@ function PendingAccountRow({ user, businesses, onAssigned }: PendingAccountRowPr
             value={businessId}
             onChange={(event) => setBusinessId(Number(event.target.value))}
             disabled={saving}
-            aria-label={`Organization for ${user.username}`}
+            aria-label={`Organization for ${user.username || user.email}`}
           >
             {businesses.map((business) => (
               <option key={business.id} value={business.id}>{business.name}</option>
@@ -195,7 +195,7 @@ function PendingAccountRow({ user, businesses, onAssigned }: PendingAccountRowPr
             value={role}
             onChange={(event) => setRole(event.target.value as 'BUSINESS_ADMIN' | 'EMPLOYEE')}
             disabled={saving}
-            aria-label={`Role for ${user.username}`}
+            aria-label={`Role for ${user.username || user.email}`}
           >
             <option value="EMPLOYEE">Employee</option>
             <option value="BUSINESS_ADMIN">Organization Admin</option>

@@ -10,12 +10,14 @@ import DataState from '../components/ui/DataState';
 import UserAvatar from '../components/UserAvatar';
 
 interface ProfileForm {
+  username: string;
   email: string;
   phone: string;
   address: string;
 }
 
 const emptyForm: ProfileForm = {
+  username: '',
   email: '',
   phone: '',
   address: '',
@@ -37,6 +39,7 @@ export default function ProfilePage() {
       .then((res) => {
         setProfile(res.data);
         setForm({
+          username: res.data.username ?? '',
           email: res.data.email ?? '',
           phone: res.data.phone ?? '',
           address: res.data.address ?? '',
@@ -54,6 +57,7 @@ export default function ProfilePage() {
   const openEdit = () => {
     if (!profile) return;
     setForm({
+      username: profile.username ?? '',
       email: profile.email ?? '',
       phone: profile.phone ?? '',
       address: profile.address ?? '',
@@ -89,6 +93,7 @@ export default function ProfilePage() {
     setSaving(true);
     try {
       const res = await updateMe({
+        username: form.username.trim() || null,
         email: form.email.trim(),
         phone: form.phone.trim() || null,
         address: form.address.trim() || null,
@@ -96,6 +101,7 @@ export default function ProfilePage() {
 
       setProfile(res.data);
       setForm({
+        username: res.data.username ?? '',
         email: res.data.email ?? '',
         phone: res.data.phone ?? '',
         address: res.data.address ?? '',
@@ -170,6 +176,10 @@ export default function ProfilePage() {
         {success && <DataState type="success">{success}</DataState>}
         {profile && (
           <div className="profile-layout">
+            {(() => {
+              const displayName = profile.username || profile.email;
+              return (
+                <>
             <section className="profile-card">
               <button
                 type="button"
@@ -182,13 +192,13 @@ export default function ProfilePage() {
                 aria-label="Open profile picture"
               >
                 <UserAvatar
-                  username={profile.username}
+                  username={displayName}
                   imageUrl={profile.profileImageUrl}
                   className="profile-avatar"
                 />
               </button>
               <div className="profile-card-copy">
-                <h2>{profile.username}</h2>
+                <h2>{displayName}</h2>
                 <span>{profile.role}</span>
                 {profile.businessName && <p>{profile.businessName}</p>}
               </div>
@@ -196,7 +206,7 @@ export default function ProfilePage() {
 
             <table className="detail-table">
               <tbody>
-                <tr><th>Username</th><td>{profile.username}</td></tr>
+                <tr><th>Username</th><td>{profile.username || '-'}</td></tr>
                 <tr><th>Email</th><td>{profile.email}</td></tr>
                 <tr><th>Phone</th><td>{profile.phone}</td></tr>
                 <tr><th>Address</th><td>{profile.address}</td></tr>
@@ -221,6 +231,14 @@ export default function ProfilePage() {
                     </button>
                   </div>
                   <form className="profile-edit-form" onSubmit={handleSubmit}>
+                    <label>
+                      Username
+                      <input
+                        value={form.username}
+                        onChange={(event) => updateField('username', event.target.value)}
+                        autoComplete="username"
+                      />
+                    </label>
                     <label>
                       Email
                       <input
@@ -277,7 +295,7 @@ export default function ProfilePage() {
                   </div>
                   <div className="image-modal-body">
                     <UserAvatar
-                      username={profile.username}
+                      username={displayName}
                       imageUrl={profile.profileImageUrl}
                       className="image-modal-avatar"
                     />
@@ -312,6 +330,9 @@ export default function ProfilePage() {
                 </section>
               </div>
             )}
+                </>
+              );
+            })()}
           </div>
         )}
     </PageShell>
