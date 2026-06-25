@@ -2,6 +2,7 @@ package com.fleet.auth.service;
 
 import com.fleet.auth.entity.Credential;
 import com.fleet.auth.entity.Role;
+import com.fleet.auth.entity.UserStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -22,6 +23,10 @@ public class CredentialDetails implements UserDetails {
         return credential.getRole().getRoleName().canonical();
     }
 
+    public UserStatus getStatus() {
+        return credential.getStatus() == null ? UserStatus.ACTIVE : credential.getStatus();
+    }
+
     public Long getUserId() {
         return credential.getUserData() == null ? null : credential.getUserData().getUserId();
     }
@@ -38,6 +43,17 @@ public class CredentialDetails implements UserDetails {
                 : credential.getUserData().getBusiness().getName();
     }
 
+    public String getDisplayUsername() {
+        return credential.getUsername();
+    }
+
+    public String getEmail() {
+        if (credential.getEmail() != null) {
+            return credential.getEmail();
+        }
+        return credential.getUserData() == null ? credential.getUsername() : credential.getUserData().getEmail();
+    }
+
     @Override
     public String getPassword() {
         return credential.getPasswordHash();
@@ -45,7 +61,7 @@ public class CredentialDetails implements UserDetails {
 
     @Override
     public String getUsername() {
-        return credential.getUsername();
+        return getEmail();
     }
 
     @Override
@@ -65,6 +81,6 @@ public class CredentialDetails implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return true;
+        return !Boolean.FALSE.equals(credential.getEnabled()) && getStatus() == UserStatus.ACTIVE;
     }
 }

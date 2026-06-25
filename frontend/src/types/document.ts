@@ -98,6 +98,31 @@ export interface DocumentResponse {
   approvedData: ApprovedDocumentDataResponse | null;
 }
 
+export interface PagedResponse<T> {
+  items: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}
+
+export interface DocumentHistoryItem {
+  documentId: string;
+  originalFileName: string;
+  contentType: string;
+  fileSize: number;
+  vehicleId: number;
+  businessId: number | null;
+  documentType: DocumentType;
+  documentSubtype: string | null;
+  status: DocumentStatus;
+  uploadedByUserId: number | null;
+  uploadedByUsername: string | null;
+  uploadedByEmail: string | null;
+  uploadedAt: string;
+  updatedAt: string;
+}
+
 export interface ReviewDocumentRequest {
   decision: 'APPROVE' | 'REJECT';
   approvedData?: Record<string, unknown>;

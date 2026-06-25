@@ -6,6 +6,9 @@ import jakarta.validation.constraints.Size;
 
 @Schema(name = "UpdateUserRequest", description = "Payload used to update user profile data.")
 public record UpdateUserRequest(
+        @Schema(description = "Display username. Used for profile display, not login.", example = "alice")
+        @Size(max = 50, message = "Username must be at most 50 characters")
+        String username,
         @Schema(description = "User email address.", example = "alice@example.com")
         @Email(message = "Email must be valid")
         String email,

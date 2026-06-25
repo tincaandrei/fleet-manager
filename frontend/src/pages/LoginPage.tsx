@@ -7,7 +7,7 @@ import { homeForRole, normalizeRole } from '../auth/roleHome';
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -18,14 +18,14 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiLogin({ username, password });
-      const { token, username: name, role, userId, businessId, businessName } = res.data;
+      const res = await apiLogin({ email, password });
+      const { token, username: name, email: responseEmail, role, userId, businessId, businessName } = res.data;
       const normalizedRole = normalizeRole(role);
       if (!normalizedRole) {
         setError('Unsupported role returned by server.');
         return;
       }
-      login(token, name, normalizedRole, userId, businessId, businessName);
+      login(token, name || responseEmail, normalizedRole, userId, businessId, businessName);
       navigate(homeForRole(normalizedRole, businessId));
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } };
@@ -51,13 +51,14 @@ export default function LoginPage() {
           {error && <p className="error">{error}</p>}
 
           <label>
-            Username
+            Email
             <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               required
               autoFocus
-              autoComplete="username"
+              autoComplete="email"
             />
           </label>
 

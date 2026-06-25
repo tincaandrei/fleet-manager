@@ -3,8 +3,10 @@ package com.fleet.document.controller;
 import com.fleet.document.dto.ApproveDocumentRequest;
 import com.fleet.document.dto.ApprovedDocumentDataResponse;
 import com.fleet.document.dto.DocumentResponse;
+import com.fleet.document.dto.DocumentHistoryResponse;
 import com.fleet.document.dto.DocumentInfoFolderResponse;
 import com.fleet.document.dto.ErrorResponse;
+import com.fleet.document.dto.PagedResponse;
 import com.fleet.document.dto.ParserResultRequest;
 import com.fleet.document.dto.RejectDocumentRequest;
 import com.fleet.document.dto.ReviewDocumentRequest;
@@ -119,6 +121,24 @@ public class DocumentController {
     ) {
         return ResponseEntity.ok(documentService.listByVehicle(
                 vehicleId,
+                servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
+                authentication
+        ));
+    }
+
+    @GetMapping("/history")
+    @Operation(summary = "Document upload history", description = "Returns upload history visible to the current user.")
+    public ResponseEntity<PagedResponse<DocumentHistoryResponse>> history(
+            @Parameter(description = "Zero-based page index.", example = "0")
+            @RequestParam(name = "page", required = false, defaultValue = "0") Integer page,
+            @Parameter(description = "Page size, capped at 100.", example = "20")
+            @RequestParam(name = "size", required = false, defaultValue = "20") Integer size,
+            HttpServletRequest servletRequest,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(documentService.history(
+                page,
+                size,
                 servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
                 authentication
         ));

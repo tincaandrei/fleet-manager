@@ -1,8 +1,10 @@
 package com.fleet.document.service;
 
 import com.fleet.document.dto.ApproveDocumentRequest;
+import com.fleet.document.dto.PagedResponse;
 import com.fleet.document.dto.ParserResultRequest;
 import com.fleet.document.dto.RejectDocumentRequest;
+import com.fleet.document.dto.UserLookupResponse;
 import com.fleet.document.dto.VehicleBasicInfoResponse;
 import com.fleet.document.entity.ApprovedDocumentData;
 import com.fleet.document.entity.DocumentExtractionDraft;
@@ -21,11 +23,15 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -57,6 +63,9 @@ class DocumentServiceTest {
     private FleetVehicleClient fleetVehicleClient;
 
     @Mock
+    private AuthUserLookupClient authUserLookupClient;
+
+    @Mock
     private DocumentParserResultService parserResultService;
 
     @Mock
@@ -81,6 +90,12 @@ class DocumentServiceTest {
             new JwtPrincipal("user", 20L, 100L, java.util.Set.of("EMPLOYEE")),
             null,
             "ROLE_EMPLOYEE"
+    );
+
+    private final Authentication superadminAuth = new TestingAuthenticationToken(
+            new JwtPrincipal("super", 1L, null, java.util.Set.of("SUPERADMIN")),
+            null,
+            "ROLE_SUPERADMIN"
     );
 
     @Test
@@ -288,6 +303,49 @@ class DocumentServiceTest {
                 .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
     }
 
+    @Test
+    void employeeHistoryContainsOnlyOwnUploads() {
+        VehicleDocument document = document(UUID.randomUUID(), DocumentStatus.PARSING);
+        document.setUploadedByUserId(20L);
+        when(documentRepository.findByUploadedByUserIdOrderByCreatedAtDesc(20L, PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(document), PageRequest.of(0, 20), 1));
+        when(authUserLookupClient.lookupUsers(List.of(20L), "Bearer token"))
+                .thenReturn(List.of(new UserLookupResponse(20L, "user", "user@example.com", 100L, "EMPLOYEE")));
+
+        PagedResponse<?> response = documentService.history(0, 20, "Bearer token", userAuth);
+
+        assertThat(response.totalElements()).isEqualTo(1);
+        assertThat(response.items()).hasSize(1);
+        verify(documentRepository).findByUploadedByUserIdOrderByCreatedAtDesc(20L, PageRequest.of(0, 20));
+    }
+
+    @Test
+    void businessAdminHistoryContainsOrganizationUploads() {
+        VehicleDocument document = document(UUID.randomUUID(), DocumentStatus.NEEDS_REVIEW);
+        document.setUploadedByUserId(30L);
+        when(documentRepository.findByBusinessIdOrderByCreatedAtDesc(100L, PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(document), PageRequest.of(0, 20), 1));
+        when(authUserLookupClient.lookupUsers(List.of(30L), "Bearer token")).thenReturn(List.of());
+
+        PagedResponse<?> response = documentService.history(0, 20, "Bearer token", staffAuth);
+
+        assertThat(response.totalElements()).isEqualTo(1);
+        verify(documentRepository).findByBusinessIdOrderByCreatedAtDesc(100L, PageRequest.of(0, 20));
+    }
+
+    @Test
+    void superadminHistoryContainsAllUploads() {
+        VehicleDocument document = document(UUID.randomUUID(), DocumentStatus.VALIDATED);
+        when(documentRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 20)))
+                .thenReturn(new PageImpl<>(List.of(document), PageRequest.of(0, 20), 1));
+        when(authUserLookupClient.lookupUsers(List.of(10L), "Bearer token")).thenReturn(List.of());
+
+        PagedResponse<?> response = documentService.history(0, 20, "Bearer token", superadminAuth);
+
+        assertThat(response.totalElements()).isEqualTo(1);
+        verify(documentRepository).findAllByOrderByCreatedAtDesc(PageRequest.of(0, 20));
+    }
+
     private VehicleDocument document(UUID id, DocumentStatus status) {
         VehicleDocument document = new VehicleDocument();
         document.setId(id);
@@ -300,6 +358,9 @@ class DocumentServiceTest {
         document.setContentType("application/pdf");
         document.setFileSize(123L);
         document.setStoragePath("/tmp/stored.pdf");
+        document.setUploadedByUserId(10L);
+        document.setCreatedAt(Instant.parse("2026-06-24T10:00:00Z"));
+        document.setUpdatedAt(Instant.parse("2026-06-24T10:00:00Z"));
         return document;
     }
 

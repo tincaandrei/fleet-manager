@@ -10,12 +10,15 @@ import com.fleet.auth.entity.RoleEntity;
 import com.fleet.auth.entity.UserData;
 import com.fleet.auth.repository.BusinessRepository;
 import com.fleet.auth.repository.CredentialRepository;
+import com.fleet.auth.repository.InvitationTokenRepository;
 import com.fleet.auth.repository.RoleEntityRepository;
 import com.fleet.auth.repository.UserDataRepository;
 import com.fleet.auth.service.JwtService;
+import com.fleet.auth.service.MailService;
 import com.fleet.auth.service.UserInfoService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,7 +32,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.startsWith;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -63,6 +71,9 @@ class AuthIntegrationTest {
     private UserDataRepository userDataRepository;
 
     @Autowired
+    private InvitationTokenRepository invitationTokenRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
@@ -71,8 +82,12 @@ class AuthIntegrationTest {
     @Autowired
     private UserInfoService userInfoService;
 
+    @MockBean
+    private MailService mailService;
+
     @BeforeEach
     void setUp() {
+        invitationTokenRepository.deleteAll();
         userDataRepository.deleteAll();
         credentialRepository.deleteAll();
         businessRepository.deleteAll();
@@ -85,8 +100,8 @@ class AuthIntegrationTest {
     }
 
     @Test
-    void registerCreatesUnassignedEmployeeAccount() throws Exception {
-        String response = mockMvc.perform(post("/register")
+    void publicRegistrationIsDisabled() throws Exception {
+        mockMvc.perform(post("/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -97,61 +112,217 @@ class AuthIntegrationTest {
                                   "address": "Main Street 1"
                                 }
                                 """))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.username").value("alice"))
-                .andExpect(jsonPath("$.email").value("alice@example.com"))
-                .andExpect(jsonPath("$.phone").value("+40123456789"))
-                .andExpect(jsonPath("$.address").value("Main Street 1"))
-                .andExpect(jsonPath("$.role").value("EMPLOYEE"))
-                .andExpect(jsonPath("$.businessId").doesNotExist())
-                .andExpect(jsonPath("$.businessName").doesNotExist())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-
-        JsonNode jsonNode = objectMapper.readTree(response);
-        assertTrue(jsonNode.hasNonNull("userId"));
-
-        Credential credential = credentialRepository.findByUsername("alice").orElseThrow();
-        UserData userData = userDataRepository.findByEmail("alice@example.com").orElseThrow();
-        assertEquals(userData.getCredential().getCredentialId(), credential.getCredentialId());
-        assertEquals(Role.EMPLOYEE, credential.getRole().getRoleName());
-        assertNull(userData.getBusiness());
-        assertTrue(passwordEncoder.matches("password123", credential.getPasswordHash()));
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Access denied"));
     }
 
     @Test
-    void registerRejectsDuplicateUsernameOrEmail() throws Exception {
-        register("alice", "alice@example.com");
+    void adminCanCreateInvitedUserAndSendEmail() throws Exception {
+        String adminToken = login("admin", "admin123");
 
-        mockMvc.perform(post("/register")
+        mockMvc.perform(post("/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "username": "alice",
-                                  "email": "alice2@example.com",
-                                  "password": "password123"
+                                  "email": "invitee@example.com",
+                                  "firstName": "Andrei",
+                                  "lastName": "Popescu",
+                                  "roles": ["USER"]
                                 }
                                 """))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value("Username is already taken"));
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.email").value("invitee@example.com"))
+                .andExpect(jsonPath("$.firstName").value("Andrei"))
+                .andExpect(jsonPath("$.lastName").value("Popescu"))
+                .andExpect(jsonPath("$.roles[0]").value("EMPLOYEE"))
+                .andExpect(jsonPath("$.status").value("INVITED"))
+                .andExpect(jsonPath("$.enabled").value(false))
+                .andExpect(jsonPath("$.passwordChangeRequired").value(true));
 
-        mockMvc.perform(post("/register")
+        UserData userData = userDataRepository.findByEmail("invitee@example.com").orElseThrow();
+        assertEquals(Role.EMPLOYEE, userData.getCredential().getRole().getRoleName().canonical());
+        assertEquals(com.fleet.auth.entity.UserStatus.INVITED, userData.getCredential().getStatus());
+        assertNotNull(userData.getCredential().getPasswordHash());
+        verify(mailService).sendUserInvitationEmail(eq("invitee@example.com"), startsWith("http://localhost:5173/accept-invite?token="), eq(24L));
+    }
+
+    @Test
+    void inviteAcceptanceActivatesUserAndAllowsLogin() throws Exception {
+        String adminToken = login("admin", "admin123");
+
+        mockMvc.perform(post("/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "username": "alice2",
-                                  "email": "alice@example.com",
-                                  "password": "password123"
+                                  "email": "invitee@example.com",
+                                  "firstName": "Andrei",
+                                  "lastName": "Popescu",
+                                  "roles": ["USER"]
+                                }
+                                """))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "invitee@example.com",
+                                  "password": "anything"
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("INVITATION_NOT_ACCEPTED"));
+
+        org.mockito.ArgumentCaptor<String> linkCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(mailService).sendUserInvitationEmail(eq("invitee@example.com"), linkCaptor.capture(), eq(24L));
+        String rawToken = linkCaptor.getValue().substring(linkCaptor.getValue().indexOf("token=") + 6);
+        assertTrue(invitationTokenRepository.findAll().stream()
+                .noneMatch(token -> token.getTokenHash().equals(rawToken)));
+
+        mockMvc.perform(get("/invitations/validate")
+                        .param("token", rawToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.valid").value(true))
+                .andExpect(jsonPath("$.email").value("i***@example.com"));
+
+        mockMvc.perform(post("/accept-invite")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token": "%s",
+                                  "newPassword": "StrongPassword123"
+                                }
+                                """.formatted(rawToken)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Password set successfully. You can now log in."));
+
+        UserData userData = userDataRepository.findByEmail("invitee@example.com").orElseThrow();
+        assertEquals(com.fleet.auth.entity.UserStatus.ACTIVE, userData.getCredential().getStatus());
+        assertTrue(Boolean.TRUE.equals(userData.getCredential().getEnabled()));
+        assertTrue(Boolean.FALSE.equals(userData.getCredential().getPasswordChangeRequired()));
+        assertTrue(passwordEncoder.matches("StrongPassword123", userData.getCredential().getPasswordHash()));
+        assertNotNull(invitationTokenRepository.findAll().get(0).getUsedAt());
+
+        mockMvc.perform(post("/accept-invite")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token": "%s",
+                                  "newPassword": "AnotherPassword123"
+                                }
+                                """.formatted(rawToken)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("INVITATION_TOKEN_USED"));
+
+        mockMvc.perform(post("/accept-invite")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token": "not-a-real-token",
+                                  "newPassword": "AnotherPassword123"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("INVITATION_TOKEN_INVALID"));
+
+        login("invitee@example.com", "StrongPassword123");
+    }
+
+    @Test
+    void normalUserCannotCreateInvitedUserAndDuplicateEmailIsRejected() throws Exception {
+        createUser("employee", "employee@example.com", "password123", Role.EMPLOYEE, null, null, null);
+        String employeeToken = login("employee", "password123");
+
+        mockMvc.perform(post("/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + employeeToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "invitee@example.com",
+                                  "firstName": "Andrei",
+                                  "lastName": "Popescu",
+                                  "roles": ["USER"]
+                                }
+                                """))
+                .andExpect(status().isForbidden());
+
+        String adminToken = login("admin", "admin123");
+        createUser("invitee@example.com", "invitee@example.com", "password123", Role.EMPLOYEE, null, null, null);
+        mockMvc.perform(post("/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "invitee@example.com",
+                                  "firstName": "Andrei",
+                                  "lastName": "Popescu",
+                                  "roles": ["USER"]
                                 }
                                 """))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.message").value("Email is already taken"));
+                .andExpect(jsonPath("$.message").value("EMAIL_ALREADY_EXISTS"));
+    }
+
+    @Test
+    void resendInviteOnlyWorksForInvitedUsersAndDisabledUserCannotLogin() throws Exception {
+        String adminToken = login("admin", "admin123");
+
+        String response = mockMvc.perform(post("/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "invitee@example.com",
+                                  "firstName": "Andrei",
+                                  "lastName": "Popescu",
+                                  "roles": ["USER"]
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        Long invitedUserId = objectMapper.readTree(response).get("id").asLong();
+
+        mockMvc.perform(post("/admin/users/{id}/resend-invite", invitedUserId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken))
+                .andExpect(status().isOk());
+        verify(mailService, times(2)).sendUserInvitationEmail(eq("invitee@example.com"), startsWith("http://localhost:5173/accept-invite?token="), eq(24L));
+
+        UserData activeUser = createUser("active", "active@example.com", "password123", Role.EMPLOYEE, null, null, null);
+        mockMvc.perform(post("/admin/users/{id}/resend-invite", activeUser.getUserId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("INVITATION_NOT_ACCEPTED"));
+
+        mockMvc.perform(patch("/admin/users/{id}/status", activeUser.getUserId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "status": "DISABLED"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DISABLED"));
+
+        mockMvc.perform(post("/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "active",
+                                  "password": "password123"
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("ACCOUNT_DISABLED"));
     }
 
     @Test
     void loginForUnassignedUserReturnsNullOrganizationFieldsAndProtectedOrgEndpointsAreForbidden() throws Exception {
-        register("alice", "alice@example.com");
+        createUser("alice", "alice@example.com", "password123", Role.EMPLOYEE, null, null, null);
 
         String response = mockMvc.perform(post("/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -184,7 +355,7 @@ class AuthIntegrationTest {
 
     @Test
     void superadminCanListAndAssignUnassignedUsers() throws Exception {
-        Long userId = register("alice", "alice@example.com");
+        Long userId = createUser("alice", "alice@example.com", "password123", Role.EMPLOYEE, null, null, null).getUserId();
         Business business = createBusiness("Acme Transport", true);
         String adminToken = login("admin", "admin123");
 
@@ -217,7 +388,7 @@ class AuthIntegrationTest {
 
     @Test
     void assignmentRequiresSuperadmin() throws Exception {
-        Long userId = register("alice", "alice@example.com");
+        Long userId = createUser("alice", "alice@example.com", "password123", Role.EMPLOYEE, null, null, null).getUserId();
         Business business = createBusiness("Acme Transport", true);
         UserData employee = createUser("bob", "bob@example.com", "password123", Role.EMPLOYEE, business, null, null);
         String employeeToken = login(employee.getCredential().getUsername(), "password123");
@@ -237,8 +408,8 @@ class AuthIntegrationTest {
 
     @Test
     void assignmentRejectsInvalidRoleInactiveBusinessAndAlreadyAssignedUser() throws Exception {
-        Long firstUserId = register("alice", "alice@example.com");
-        Long secondUserId = register("charlie", "charlie@example.com");
+        Long firstUserId = createUser("alice", "alice@example.com", "password123", Role.EMPLOYEE, null, null, null).getUserId();
+        Long secondUserId = createUser("charlie", "charlie@example.com", "password123", Role.EMPLOYEE, null, null, null).getUserId();
         Business activeBusiness = createBusiness("Acme Transport", true);
         Business inactiveBusiness = createBusiness("Dormant Transport", false);
         String adminToken = login("admin", "admin123");
@@ -304,24 +475,13 @@ class AuthIntegrationTest {
     }
 
     @Test
-    void loginUsesUsernameOnlyAndIssuesSingleRoleToken() throws Exception {
+    void loginUsesEmailAndIssuesSingleRoleToken() throws Exception {
         createUser("alice", "alice@example.com", "password123", Role.EMPLOYEE, null, "+40123456789", "Main Street 1");
 
-        String token = login("alice", "password123");
+        String token = login("alice@example.com", "password123");
 
-        assertEquals("alice", jwtService.extractUsername(token));
+        assertEquals("alice@example.com", jwtService.extractUsername(token));
         assertEquals(Role.EMPLOYEE, jwtService.extractRole(token));
-
-        mockMvc.perform(post("/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "username": "alice@example.com",
-                                  "password": "password123"
-                                }
-                                """))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.message").value("Invalid username or password"));
     }
 
     @Test
@@ -345,6 +505,33 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$.role").value("EMPLOYEE"))
                 .andExpect(jsonPath("$.businessId").value(business.getId()))
                 .andExpect(jsonPath("$.businessName").value("Acme Transport"));
+    }
+
+    @Test
+    void lookupUsersReturnsOnlyVisibleUsers() throws Exception {
+        Business business = createBusiness("Acme Transport", true);
+        UserData admin = createUser("manager", "manager@example.com", "password123", Role.BUSINESS_ADMIN, business, null, null);
+        UserData employee = createUser("driver", "driver@example.com", "password123", Role.EMPLOYEE, business, null, null);
+        UserData outsider = createUser("outsider", "outsider@example.com", "password123", Role.EMPLOYEE, null, null, null);
+
+        String adminToken = login("manager", "password123");
+        mockMvc.perform(get("/users/lookup")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                        .param("ids", employee.getUserId().toString(), outsider.getUserId().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].userId").value(employee.getUserId()))
+                .andExpect(jsonPath("$[0].username").value("driver"))
+                .andExpect(jsonPath("$[0].email").value("driver@example.com"))
+                .andExpect(jsonPath("$[0].businessId").value(business.getId()))
+                .andExpect(jsonPath("$[1]").doesNotExist());
+
+        String employeeToken = login("driver", "password123");
+        mockMvc.perform(get("/users/lookup")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + employeeToken)
+                        .param("ids", admin.getUserId().toString(), employee.getUserId().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].userId").value(employee.getUserId()))
+                .andExpect(jsonPath("$[1]").doesNotExist());
     }
 
     @Test
@@ -394,6 +581,7 @@ class AuthIntegrationTest {
 
         Credential credential = credentialRepository.save(Credential.builder()
                 .username(username)
+                .email(email)
                 .passwordHash(passwordEncoder.encode(password))
                 .role(roleEntity)
                 .build());
@@ -427,13 +615,13 @@ class AuthIntegrationTest {
                                 }
                                 """.formatted(username, password)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.username").value(username))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
 
         JsonNode jsonNode = objectMapper.readTree(response);
         assertTrue(jsonNode.hasNonNull("token"));
+        assertTrue(jsonNode.hasNonNull("email"));
         assertNotNull(jsonNode.get("role"));
         return jsonNode.get("token").asText();
     }

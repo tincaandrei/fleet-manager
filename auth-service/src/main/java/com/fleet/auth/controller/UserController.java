@@ -1,20 +1,28 @@
 package com.fleet.auth.controller;
 
 import com.fleet.auth.dto.AuthResponse;
+import com.fleet.auth.dto.AcceptInviteRequest;
+import com.fleet.auth.dto.AdminCreateUserRequest;
+import com.fleet.auth.dto.AdminUserResponse;
 import com.fleet.auth.dto.AssignBusinessUserRequest;
 import com.fleet.auth.dto.BusinessRequest;
 import com.fleet.auth.dto.BusinessResponse;
 import com.fleet.auth.dto.CreateBusinessUserRequest;
 import com.fleet.auth.dto.ErrorResponse;
+import com.fleet.auth.dto.InviteValidationResponse;
 import com.fleet.auth.dto.LoginRequest;
 import com.fleet.auth.dto.MeResponse;
+import com.fleet.auth.dto.MessageResponse;
 import com.fleet.auth.dto.RegisterRequest;
 import com.fleet.auth.dto.UpdateRoleRequest;
 import com.fleet.auth.dto.UpdateUserRequest;
+import com.fleet.auth.dto.UpdateUserStatusRequest;
+import com.fleet.auth.dto.UserLookupResponse;
 import com.fleet.auth.entity.Role;
 import com.fleet.auth.service.JwtService;
 import com.fleet.auth.service.CredentialDetails;
 import com.fleet.auth.service.UserInfoService;
+import com.fleet.auth.service.UserInvitationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.Hidden;
@@ -38,6 +46,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -54,6 +63,7 @@ import java.util.List;
 public class UserController {
 
     private final UserInfoService userInfoService;
+    private final UserInvitationService userInvitationService;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
 
@@ -65,8 +75,7 @@ public class UserController {
             @ApiResponse(responseCode = "409", description = "Username or email already exists", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<MeResponse> register(@Valid @RequestBody RegisterRequest registerRequest) {
-        MeResponse response = userInfoService.register(registerRequest);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        throw new org.springframework.security.access.AccessDeniedException("Public registration is disabled");
     }
 
     @Hidden
@@ -83,8 +92,10 @@ public class UserController {
             @ApiResponse(responseCode = "401", description = "Invalid credentials", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest loginRequest) {
+        String loginEmail = loginRequest.loginEmail();
+        userInfoService.assertCanLogin(loginEmail);
         Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginRequest.username(), loginRequest.password())
+                new UsernamePasswordAuthenticationToken(loginEmail, loginRequest.password())
         );
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
         String token = jwtService.generateToken(userDetails);
@@ -94,13 +105,27 @@ public class UserController {
         Long userId = userDetails instanceof CredentialDetails credentialDetails ? credentialDetails.getUserId() : null;
         Long businessId = userDetails instanceof CredentialDetails credentialDetails ? credentialDetails.getBusinessId() : null;
         String businessName = userDetails instanceof CredentialDetails credentialDetails ? credentialDetails.getBusinessName() : null;
-        return ResponseEntity.ok(new AuthResponse(token, userDetails.getUsername(), role, userId, businessId, businessName));
+        String username = userDetails instanceof CredentialDetails credentialDetails ? credentialDetails.getDisplayUsername() : userDetails.getUsername();
+        String email = userDetails instanceof CredentialDetails credentialDetails ? credentialDetails.getEmail() : userDetails.getUsername();
+        return ResponseEntity.ok(new AuthResponse(token, username, email, role, userId, businessId, businessName));
     }
 
     @Hidden
     @PostMapping("/auth/login")
     public ResponseEntity<AuthResponse> legacyLogin(@Valid @RequestBody LoginRequest loginRequest) {
         return login(loginRequest);
+    }
+
+    @PostMapping("/accept-invite")
+    @Operation(summary = "Accept invitation", description = "Sets a password for an invited user and activates the account.")
+    public ResponseEntity<MessageResponse> acceptInvite(@Valid @RequestBody AcceptInviteRequest request) {
+        return ResponseEntity.ok(userInvitationService.acceptInvite(request));
+    }
+
+    @GetMapping("/invitations/validate")
+    @Operation(summary = "Validate invitation", description = "Checks whether an invitation token can still be used.")
+    public ResponseEntity<InviteValidationResponse> validateInvite(@RequestParam("token") String token) {
+        return ResponseEntity.ok(userInvitationService.validateInvite(token));
     }
 
     @GetMapping("/users/me")
@@ -258,6 +283,48 @@ public class UserController {
     @SecurityRequirement(name = "bearerAuth")
     public ResponseEntity<List<MeResponse>> listUnassignedUsers(Authentication authentication) {
         return ResponseEntity.ok(userInfoService.listUnassignedUsers(authentication));
+    }
+
+    @PostMapping("/admin/users")
+    @Operation(summary = "Create invited user", description = "Creates an invited user and sends a setup email.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<AdminUserResponse> createInvitedUser(
+            @Valid @RequestBody AdminCreateUserRequest request,
+            Authentication authentication
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(userInfoService.createInvitedUser(request, authentication));
+    }
+
+    @PostMapping("/admin/users/{id}/resend-invite")
+    @Operation(summary = "Resend invitation", description = "Sends a fresh invitation link for an invited user.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<AdminUserResponse> resendInvite(
+            @PathVariable Long id,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(userInfoService.resendInvite(id, authentication));
+    }
+
+    @PatchMapping("/admin/users/{id}/status")
+    @Operation(summary = "Update user status", description = "Enables or disables a user account.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<AdminUserResponse> updateUserStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateUserStatusRequest request,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(userInfoService.updateUserStatus(id, request, authentication));
+    }
+
+    @GetMapping("/users/lookup")
+    @Operation(summary = "Lookup users", description = "Returns minimal user display data for visible user ids.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<List<UserLookupResponse>> lookupUsers(
+            @Parameter(description = "User ids to lookup.", example = "1,2,3")
+            @RequestParam(name = "ids") List<Long> ids,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(userInfoService.lookupUsers(ids, authentication));
     }
 
     @PutMapping("/users/{id}/assignment")

@@ -3,13 +3,16 @@ package com.fleet.document.service;
 import com.fleet.document.dto.ApproveDocumentRequest;
 import com.fleet.document.dto.ApprovedDocumentDataResponse;
 import com.fleet.document.dto.DocumentExtractionResponse;
+import com.fleet.document.dto.DocumentHistoryResponse;
 import com.fleet.document.dto.DocumentInfoFolderResponse;
 import com.fleet.document.dto.DocumentResponse;
 import com.fleet.document.dto.LlmUsageDto;
+import com.fleet.document.dto.PagedResponse;
 import com.fleet.document.dto.ParserResultRequest;
 import com.fleet.document.dto.RejectDocumentRequest;
 import com.fleet.document.dto.ReviewDecision;
 import com.fleet.document.dto.ReviewDocumentRequest;
+import com.fleet.document.dto.UserLookupResponse;
 import com.fleet.document.dto.VehicleAlertGroupResponse;
 import com.fleet.document.dto.VehicleBasicInfoResponse;
 import com.fleet.document.dto.VehicleDocumentAttributeResponse;
@@ -28,6 +31,8 @@ import com.fleet.document.service.event.DocumentUploadedForParsingEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.Resource;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -43,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -54,6 +60,7 @@ public class DocumentService {
     private final ApprovedDocumentDataRepository approvedDataRepository;
     private final DocumentStorageService storageService;
     private final FleetVehicleClient fleetVehicleClient;
+    private final AuthUserLookupClient authUserLookupClient;
     private final DocumentParserResultService parserResultService;
     private final VehicleDocumentAttributeService vehicleDocumentAttributeService;
     private final ApplicationEventPublisher eventPublisher;
@@ -209,6 +216,57 @@ public class DocumentService {
         return queue.stream()
                 .map(document -> toResponse(document, true))
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<DocumentHistoryResponse> history(
+            Integer page,
+            Integer size,
+            String authorizationHeader,
+            Authentication authentication
+    ) {
+        int effectivePage = page == null ? 0 : Math.max(page, 0);
+        int effectiveSize = size == null ? 20 : Math.min(Math.max(size, 1), 100);
+        PageRequest pageRequest = PageRequest.of(effectivePage, effectiveSize);
+        Page<VehicleDocument> documents;
+
+        if (SecurityUtils.isSuperadmin(authentication)) {
+            documents = documentRepository.findAllByOrderByCreatedAtDesc(pageRequest);
+        } else if (SecurityUtils.isBusinessAdmin(authentication)) {
+            Long businessId = SecurityUtils.currentBusinessId(authentication);
+            if (businessId == null) {
+                throw new AccessDeniedException("Access denied");
+            }
+            documents = documentRepository.findByBusinessIdOrderByCreatedAtDesc(businessId, pageRequest);
+        } else if (SecurityUtils.isEmployee(authentication)) {
+            Long userId = SecurityUtils.currentUserId(authentication);
+            if (userId == null) {
+                throw new AccessDeniedException("Access denied");
+            }
+            documents = documentRepository.findByUploadedByUserIdOrderByCreatedAtDesc(userId, pageRequest);
+        } else {
+            throw new AccessDeniedException("Access denied");
+        }
+
+        List<Long> uploaderIds = documents.getContent().stream()
+                .map(VehicleDocument::getUploadedByUserId)
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList();
+        Map<Long, UserLookupResponse> uploaders = authUserLookupClient.lookupUsers(uploaderIds, authorizationHeader).stream()
+                .collect(Collectors.toMap(UserLookupResponse::userId, Function.identity(), (left, right) -> left));
+
+        List<DocumentHistoryResponse> items = documents.getContent().stream()
+                .map(document -> toDocumentHistoryResponse(document, uploaders.get(document.getUploadedByUserId())))
+                .toList();
+
+        return new PagedResponse<>(
+                items,
+                documents.getNumber(),
+                documents.getSize(),
+                documents.getTotalElements(),
+                documents.getTotalPages()
+        );
     }
 
     @Transactional
@@ -576,6 +634,25 @@ public class DocumentService {
                 draft.getParserStatus(),
                 draft.getErrorCode(),
                 draft.getErrorMessage()
+        );
+    }
+
+    private DocumentHistoryResponse toDocumentHistoryResponse(VehicleDocument document, UserLookupResponse uploader) {
+        return new DocumentHistoryResponse(
+                document.getId(),
+                document.getOriginalFileName(),
+                document.getContentType(),
+                document.getFileSize(),
+                document.getVehicleId(),
+                document.getBusinessId(),
+                document.getDocumentType(),
+                document.getDocumentSubtype(),
+                document.getStatus(),
+                document.getUploadedByUserId(),
+                uploader == null ? null : uploader.username(),
+                uploader == null ? null : uploader.email(),
+                document.getCreatedAt(),
+                document.getUpdatedAt()
         );
     }
 

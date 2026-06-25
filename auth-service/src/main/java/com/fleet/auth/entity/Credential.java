@@ -2,6 +2,8 @@ package com.fleet.auth.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -30,11 +32,27 @@ public class Credential {
     @Column(name = "credential_id")
     private Long credentialId;
 
-    @Column(nullable = false, unique = true, length = 50)
+    @Column(unique = true, length = 50)
     private String username;
+
+    @Column(unique = true, length = 255)
+    private String email;
 
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
+
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    private UserStatus status = UserStatus.ACTIVE;
+
+    @Builder.Default
+    @Column
+    private Boolean enabled = true;
+
+    @Builder.Default
+    @Column(name = "password_change_required")
+    private Boolean passwordChangeRequired = false;
 
     @ManyToOne(fetch = FetchType.EAGER, optional = false)
     @JoinColumn(name = "role_id", nullable = false)

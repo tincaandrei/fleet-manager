@@ -1,17 +1,19 @@
 // ── Roles ─────────────────────────────────────────────────────────────────────
 
 export type Role = 'SUPERADMIN' | 'BUSINESS_ADMIN' | 'EMPLOYEE';
+export type UserStatus = 'INVITED' | 'ACTIVE' | 'DISABLED';
 
 // ── Login / Register ──────────────────────────────────────────────────────────
 
 export interface LoginRequest {
-  username: string;
+  email: string;
   password: string;
 }
 
 export interface LoginResponse {
   token: string;
-  username: string;
+  username: string | null;
+  email: string;
   role: Role;
   userId: number;
   businessId: number | null;
@@ -30,11 +32,12 @@ export interface RegisterRequest {
 
 export interface UserProfile {
   userId: number;
-  username: string;
+  username: string | null;
   email: string;
   phone: string | null;
   address: string | null;
   role: Role;
+  status?: UserStatus;
   businessId: number | null;
   businessName: string | null;
   profileImageUrl: string | null;
@@ -68,24 +71,47 @@ export interface BusinessRequest {
 
 export interface BusinessUser {
   userId: number;
-  username: string;
+  username: string | null;
   email: string;
   phone: string | null;
   address: string | null;
   role: 'BUSINESS_ADMIN' | 'EMPLOYEE';
+  status?: UserStatus;
   businessId: number;
   businessName: string | null;
   profileImageUrl?: string | null;
   profileImageOriginalFileName?: string | null;
 }
 
-export interface CreateBusinessUserRequest {
-  username: string;
+export interface InviteUserRequest {
+  businessId?: number | null;
   email: string;
-  password: string;
-  role: 'BUSINESS_ADMIN' | 'EMPLOYEE';
-  phone?: string | null;
-  address?: string | null;
+  firstName: string;
+  lastName: string;
+  roles: Array<'BUSINESS_ADMIN' | 'EMPLOYEE'>;
+}
+
+export interface AdminUserResponse {
+  id: number;
+  email: string;
+  firstName: string;
+  lastName: string;
+  roles: Array<'BUSINESS_ADMIN' | 'EMPLOYEE' | 'SUPERADMIN'>;
+  status: UserStatus;
+  enabled: boolean;
+  passwordChangeRequired: boolean;
+  businessId: number | null;
+}
+
+export interface AcceptInviteRequest {
+  token: string;
+  newPassword: string;
+}
+
+export interface InviteValidationResponse {
+  valid: boolean;
+  email: string | null;
+  message: string;
 }
 
 export interface UpdateRoleRequest {
@@ -98,6 +124,7 @@ export interface AssignBusinessUserRequest {
 }
 
 export interface UpdateUserRequest {
+  username?: string | null;
   email?: string | null;
   phone?: string | null;
   address?: string | null;
