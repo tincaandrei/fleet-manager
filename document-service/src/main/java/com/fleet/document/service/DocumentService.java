@@ -62,6 +62,7 @@ public class DocumentService {
     private final FleetVehicleClient fleetVehicleClient;
     private final AuthUserLookupClient authUserLookupClient;
     private final DocumentParserResultService parserResultService;
+    private final DocumentHistoryPdfExportService historyPdfExportService;
     private final VehicleDocumentAttributeService vehicleDocumentAttributeService;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -105,7 +106,11 @@ public class DocumentService {
                 .uploadedByUserId(SecurityUtils.currentUserId(authentication))
                 .build();
         VehicleDocument savedDocument = documentRepository.save(document);
-        eventPublisher.publishEvent(new DocumentUploadedForParsingEvent(savedDocument.getId()));
+        eventPublisher.publishEvent(new DocumentUploadedForParsingEvent(
+                savedDocument.getId(),
+                authorizationHeader,
+                vehicleLabel(vehicle)
+        ));
         return toResponse(savedDocument, SecurityUtils.canReview(authentication));
     }
 
@@ -267,6 +272,48 @@ public class DocumentService {
                 documents.getTotalElements(),
                 documents.getTotalPages()
         );
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] exportHistoryPdf(String authorizationHeader, Authentication authentication) {
+        List<VehicleDocument> documents;
+        String title;
+        boolean includeBusiness = false;
+
+        if (SecurityUtils.isSuperadmin(authentication)) {
+            documents = documentRepository.findAllByOrderByCreatedAtDesc();
+            title = "All Document History";
+            includeBusiness = true;
+        } else if (SecurityUtils.isBusinessAdmin(authentication)) {
+            Long businessId = SecurityUtils.currentBusinessId(authentication);
+            if (businessId == null) {
+                throw new AccessDeniedException("Access denied");
+            }
+            documents = documentRepository.findByBusinessIdOrderByCreatedAtDesc(businessId);
+            title = "Organization Document History";
+        } else if (SecurityUtils.isEmployee(authentication)) {
+            Long userId = SecurityUtils.currentUserId(authentication);
+            if (userId == null) {
+                throw new AccessDeniedException("Access denied");
+            }
+            documents = documentRepository.findByUploadedByUserIdOrderByCreatedAtDesc(userId);
+            title = "My Documents";
+        } else {
+            throw new AccessDeniedException("Access denied");
+        }
+
+        List<Long> uploaderIds = documents.stream()
+                .map(VehicleDocument::getUploadedByUserId)
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList();
+        Map<Long, UserLookupResponse> uploaders = authUserLookupClient.lookupUsers(uploaderIds, authorizationHeader).stream()
+                .collect(Collectors.toMap(UserLookupResponse::userId, Function.identity(), (left, right) -> left));
+        List<DocumentHistoryResponse> items = documents.stream()
+                .map(document -> toDocumentHistoryResponse(document, uploaders.get(document.getUploadedByUserId())))
+                .toList();
+
+        return historyPdfExportService.export(title, items, includeBusiness);
     }
 
     @Transactional
@@ -593,6 +640,16 @@ public class DocumentService {
             }
         }
         return null;
+    }
+
+    private String vehicleLabel(VehicleBasicInfoResponse vehicle) {
+        if (vehicle == null) {
+            return null;
+        }
+        if (vehicle.licensePlate() != null && !vehicle.licensePlate().isBlank()) {
+            return vehicle.licensePlate().trim();
+        }
+        return vehicle.id() == null ? null : "#" + vehicle.id();
     }
 
     private DocumentResponse toResponse(VehicleDocument document, boolean includeExtractionDraft) {

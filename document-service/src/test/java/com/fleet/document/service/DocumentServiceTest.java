@@ -1,6 +1,7 @@
 package com.fleet.document.service;
 
 import com.fleet.document.dto.ApproveDocumentRequest;
+import com.fleet.document.dto.DocumentHistoryResponse;
 import com.fleet.document.dto.PagedResponse;
 import com.fleet.document.dto.ParserResultRequest;
 import com.fleet.document.dto.RejectDocumentRequest;
@@ -39,6 +40,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
@@ -67,6 +69,9 @@ class DocumentServiceTest {
 
     @Mock
     private DocumentParserResultService parserResultService;
+
+    @Mock
+    private DocumentHistoryPdfExportService historyPdfExportService;
 
     @Mock
     private VehicleDocumentAttributeService vehicleDocumentAttributeService;
@@ -123,6 +128,8 @@ class DocumentServiceTest {
         ArgumentCaptor<DocumentUploadedForParsingEvent> eventCaptor = ArgumentCaptor.forClass(DocumentUploadedForParsingEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getValue().documentId()).isEqualTo(captor.getValue().getId());
+        assertThat(eventCaptor.getValue().authorizationHeader()).isEqualTo("Bearer token");
+        assertThat(eventCaptor.getValue().vehicleLabel()).isEqualTo("B123ABC");
         verifyNoInteractions(parserResultService);
     }
 
@@ -331,6 +338,27 @@ class DocumentServiceTest {
 
         assertThat(response.totalElements()).isEqualTo(1);
         verify(documentRepository).findByBusinessIdOrderByCreatedAtDesc(100L, PageRequest.of(0, 20));
+    }
+
+    @Test
+    void businessAdminCanExportOrganizationHistoryPdf() {
+        VehicleDocument document = document(UUID.randomUUID(), DocumentStatus.NEEDS_REVIEW);
+        document.setUploadedByUserId(30L);
+        when(documentRepository.findByBusinessIdOrderByCreatedAtDesc(100L)).thenReturn(List.of(document));
+        when(authUserLookupClient.lookupUsers(List.of(30L), "Bearer token"))
+                .thenReturn(List.of(new UserLookupResponse(30L, "driver", "driver@example.com", 100L, "EMPLOYEE")));
+        when(historyPdfExportService.export(any(), any(), anyBoolean())).thenReturn(new byte[]{1, 2, 3});
+
+        byte[] pdf = documentService.exportHistoryPdf("Bearer token", staffAuth);
+
+        assertThat(pdf).containsExactly(1, 2, 3);
+        verify(documentRepository).findByBusinessIdOrderByCreatedAtDesc(100L);
+        verify(historyPdfExportService).export(
+                org.mockito.ArgumentMatchers.eq("Organization Document History"),
+                org.mockito.ArgumentMatchers.<List<DocumentHistoryResponse>>argThat(historyItems -> historyItems.size() == 1
+                        && historyItems.get(0).uploadedByUsername().equals("driver")),
+                org.mockito.ArgumentMatchers.eq(false)
+        );
     }
 
     @Test

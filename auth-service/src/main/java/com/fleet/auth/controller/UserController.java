@@ -327,6 +327,16 @@ public class UserController {
         return ResponseEntity.ok(userInfoService.lookupUsers(ids, authentication));
     }
 
+    @GetMapping("/internal/businesses/{businessId}/admins")
+    @Operation(summary = "Lookup business admins", description = "Returns active admins for the requested organization.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<List<UserLookupResponse>> lookupBusinessAdmins(
+            @Parameter(description = "Business id.", example = "1") @PathVariable Long businessId,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(userInfoService.lookupBusinessAdmins(businessId, authentication));
+    }
+
     @PutMapping("/users/{id}/assignment")
     @Operation(summary = "Assign unassigned user to organization", description = "Requires SUPERADMIN.")
     @SecurityRequirement(name = "bearerAuth")

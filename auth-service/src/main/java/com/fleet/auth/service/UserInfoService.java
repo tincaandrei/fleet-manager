@@ -314,6 +314,18 @@ public class UserInfoService implements UserDetailsService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<UserLookupResponse> lookupBusinessAdmins(Long businessId, Authentication authentication) {
+        if (businessId == null) {
+            return List.of();
+        }
+        requireCanViewBusiness(businessId, authentication);
+        return userDataRepository.findByBusinessIdOrderByCredentialEmailAsc(businessId).stream()
+                .filter(this::isActiveBusinessAdmin)
+                .map(this::toUserLookupResponse)
+                .toList();
+    }
+
     @Transactional
     public MeResponse assignUnassignedUser(Long userId, AssignBusinessUserRequest request, Authentication authentication) {
         requireSuperadmin(authentication);
@@ -571,6 +583,15 @@ public class UserInfoService implements UserDetailsService {
         }
     }
 
+    private void requireCanViewBusiness(Long businessId, Authentication authentication) {
+        if (hasRole(authentication, Role.SUPERADMIN)) {
+            return;
+        }
+        if (!businessId.equals(currentBusinessId(authentication))) {
+            throw new AccessDeniedException("Access denied");
+        }
+    }
+
     private void requireCanManageUser(UserData userData, Authentication authentication) {
         if (hasRole(authentication, Role.SUPERADMIN)) {
             return;
@@ -598,6 +619,15 @@ public class UserInfoService implements UserDetailsService {
                 && business != null
                 && currentBusinessId != null
                 && currentBusinessId.equals(business.getId());
+    }
+
+    private boolean isActiveBusinessAdmin(UserData userData) {
+        Credential credential = userData.getCredential();
+        UserStatus status = credential.getStatus() == null ? UserStatus.ACTIVE : credential.getStatus();
+        return credential.getRole().getRoleName().canonical() == Role.BUSINESS_ADMIN
+                && status == UserStatus.ACTIVE
+                && !Boolean.FALSE.equals(credential.getEnabled())
+                && !Boolean.TRUE.equals(credential.getPasswordChangeRequired());
     }
 
     private boolean hasRole(Authentication authentication, Role role) {
