@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { register } from '../api/authApi';
 import { getApiErrorMessage } from '../utils/apiError';
+import BrandLogo from '../components/BrandLogo';
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -35,11 +36,7 @@ export default function RegisterPage() {
   return (
     <div className="auth-bg">
       <div className="auth-card">
-        {/* Brand */}
-        <div className="auth-brand">
-          <span className="auth-brand-dot" aria-hidden="true" />
-          <span className="auth-brand-text">Fleet Manager</span>
-        </div>
+        <BrandLogo className="auth-brand" />
 
         <h1>Create Account</h1>
         <h2>Fill in your details to get started</h2>

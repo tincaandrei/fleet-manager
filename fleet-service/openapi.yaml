@@ -1,9 +1,9 @@
 openapi: 3.0.1
 info:
-  title: Fleet Manager Fleet Service API
-  description: Vehicle registry APIs for Fleet Manager.
+  title: DoccuFleet Fleet Service API
+  description: Vehicle registry APIs for DoccuFleet.
   contact:
-    name: Fleet Manager Team
+    name: DoccuFleet Team
   version: 1.0.0
 servers:
 - url: /api/fleet

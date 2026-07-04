@@ -18,10 +18,10 @@ public class OpenApiConfig {
     public OpenAPI fleetServiceOpenApi() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("Fleet Manager Fleet Service API")
+                        .title("DoccuFleet Fleet Service API")
                         .version("1.0.0")
-                        .description("Vehicle registry APIs for Fleet Manager.")
-                        .contact(new Contact().name("Fleet Manager Team")))
+                        .description("Vehicle registry APIs for DoccuFleet.")
+                        .contact(new Contact().name("DoccuFleet Team")))
                 .servers(List.of(new Server()
                         .url("/api/fleet")
                         .description("Fleet service through Traefik")))

@@ -18,10 +18,10 @@ public class OpenApiConfig {
     public OpenAPI fleetAuthOpenApi() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("Fleet Manager Auth Service API")
+                        .title("DoccuFleet Auth Service API")
                         .version("1.0.0")
-                        .description("JWT authentication and user role management APIs for Fleet Manager.")
-                        .contact(new Contact().name("Fleet Manager Team")))
+                        .description("JWT authentication and user role management APIs for DoccuFleet.")
+                        .contact(new Contact().name("DoccuFleet Team")))
                 .servers(List.of(new Server()
                         .url("/api/auth")
                         .description("Auth service through Traefik")))

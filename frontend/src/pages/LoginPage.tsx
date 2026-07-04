@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { login as apiLogin } from '../api/authApi';
 import { useAuth } from '../auth/useAuth';
 import { homeForRole, normalizeRole } from '../auth/roleHome';
+import BrandLogo from '../components/BrandLogo';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -38,11 +39,7 @@ export default function LoginPage() {
   return (
     <div className="auth-bg">
       <div className="auth-card">
-        {/* Brand */}
-        <div className="auth-brand">
-          <span className="auth-brand-dot" aria-hidden="true" />
-          <span className="auth-brand-text">Fleet Manager</span>
-        </div>
+        <BrandLogo className="auth-brand" />
 
         <h1>Sign In</h1>
         <h2>Enter your credentials to continue</h2>

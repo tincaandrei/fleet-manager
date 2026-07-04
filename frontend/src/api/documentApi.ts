@@ -22,6 +22,9 @@ export const listDocumentHistory = (page: number, size: number) =>
 export const exportDocumentHistoryPdf = () =>
   api.get<Blob>('/api/documents/history/export', { responseType: 'blob' });
 
+export const exportVehicleCostsExcel = () =>
+  api.get<Blob>('/api/documents/reports/vehicle-costs/export', { responseType: 'blob' });
+
 /**
  * Upload a document for a vehicle.
  * The parser determines documentType and documentSubtype automatically —

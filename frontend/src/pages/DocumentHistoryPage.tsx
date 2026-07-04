@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { downloadDocument, exportDocumentHistoryPdf, listDocumentHistory } from '../api/documentApi';
+import {
+  downloadDocument,
+  exportDocumentHistoryPdf,
+  exportVehicleCostsExcel,
+  listDocumentHistory,
+} from '../api/documentApi';
 import { useAuth } from '../auth/useAuth';
 import type { DocumentHistoryItem, DocumentStatus } from '../types/document';
 import DataState from '../components/ui/DataState';
@@ -60,7 +65,7 @@ function statusLabel(status: DocumentStatus): string {
 }
 
 export default function DocumentHistoryPage() {
-  const { role, isSuperAdmin } = useAuth();
+  const { role, isAdmin, isSuperAdmin } = useAuth();
   const [items, setItems] = useState<DocumentHistoryItem[]>([]);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -69,6 +74,7 @@ export default function DocumentHistoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   const title = useMemo(() => {
     if (role === 'SUPERADMIN') return 'All Document History';
@@ -133,6 +139,27 @@ export default function DocumentHistoryPage() {
     }
   };
 
+  const handleExportExcel = async () => {
+    if (exportingExcel) return;
+    setExportingExcel(true);
+    setError(null);
+    try {
+      const res = await exportVehicleCostsExcel();
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `fleet-costs-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      setError(apiMessage(err, 'Excel export failed.'));
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
   const canGoBack = page > 0;
   const canGoNext = page + 1 < totalPages;
 
@@ -143,6 +170,16 @@ export default function DocumentHistoryPage() {
         description={`${totalElements} uploaded document${totalElements === 1 ? '' : 's'}`}
         actions={(
           <>
+            {isAdmin && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => void handleExportExcel()}
+                disabled={exportingExcel || loading}
+              >
+                {exportingExcel ? 'Exporting...' : 'Export Excel'}
+              </button>
+            )}
             <button
               type="button"
               className="btn btn-secondary"

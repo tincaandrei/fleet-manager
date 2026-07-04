@@ -31,11 +31,11 @@ public class SmtpMailService implements MailService {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(fromAddress);
         message.setTo(to);
-        message.setSubject("Set up your Fleet Manager account");
+        message.setSubject("Set up your DoccuFleet account");
         message.setText("""
                 Hello,
 
-                An administrator created a Fleet Manager account for you.
+                An administrator created a DoccuFleet account for you.
 
                 Set your password using this link:
                 %s
