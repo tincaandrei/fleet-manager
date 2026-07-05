@@ -206,23 +206,23 @@ services:
       - "8080"
     networks:
       - fleet-net
-  labels:
-    traefik.enable: "true"
-    traefik.docker.network: "doccufleet-prod_fleet-net"
-    traefik.http.routers.frontend-http.entrypoints: web
-    traefik.http.routers.frontend-http.priority: "1"
-    traefik.http.routers.frontend-http.rule: "PathPrefix(`/`)"
-    traefik.http.routers.frontend-http.service: frontend
-    traefik.http.services.frontend.loadbalancer.server.port: "80"
-    healthcheck:
-      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
-      interval: 20s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    mem_limit: 576m
-    cpus: 0.45
-    logging: *default-logging
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "doccufleet-prod_fleet-net"
+      traefik.http.routers.frontend-http.entrypoints: web
+      traefik.http.routers.frontend-http.priority: "1"
+      traefik.http.routers.frontend-http.rule: "PathPrefix(`/`)"
+      traefik.http.routers.frontend-http.service: frontend
+      traefik.http.services.frontend.loadbalancer.server.port: "80"
+      healthcheck:
+        test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
+        interval: 20s
+        timeout: 5s
+        retries: 5
+        start_period: 30s
+      mem_limit: 576m
+      cpus: 0.45
+      logging: *default-logging
 
   document-postgres:
     image: postgres:16-alpine
