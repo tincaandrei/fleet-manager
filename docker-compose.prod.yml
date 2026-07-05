@@ -16,6 +16,9 @@ services:
       - --providers.docker.exposedbydefault=false
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.web.http.redirections.entrypoint.permanent=true
       - --ping=true
       - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:?Set ACME_EMAIL in .env.prod}
       - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
@@ -54,10 +57,14 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: "doccufleet-prod_fleet-net"
-      traefik.http.routers.frontend-http.entrypoints: web
+
+      traefik.http.routers.frontend-http.entrypoints: websecure
       traefik.http.routers.frontend-http.priority: "1"
-      traefik.http.routers.frontend-http.rule: "PathPrefix(`/`)"
+      traefik.http.routers.frontend-http.rule: "Host(`doccufleet.eu`) || Host(`www.doccufleet.eu`)"
+      traefik.http.routers.frontend-http.tls: "true"
+      traefik.http.routers.frontend-http.tls.certresolver: letsencrypt
       traefik.http.routers.frontend-http.service: frontend
+
       traefik.http.services.frontend.loadbalancer.server.port: "80"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
