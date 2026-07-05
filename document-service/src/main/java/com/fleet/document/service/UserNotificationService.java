@@ -25,6 +25,7 @@ public class UserNotificationService {
     private static final String OCR_PARSING_COMPLETED_MESSAGE = "Your uploaded document has been processed and is ready for review. The document was scanned, so OCR was used. Please verify the extracted fields.";
     private static final String PARSING_FAILED_TITLE = "Document parsing failed";
     private static final String PARSING_FAILED_MESSAGE = "We could not automatically process your document. Please review or reupload it.";
+    private static final String PENDING_REVIEW_TITLE = "Document pending review";
 
     private final UserNotificationRepository notificationRepository;
 
@@ -52,6 +53,18 @@ public class UserNotificationService {
                 NotificationType.DOCUMENT_PARSING_FAILED,
                 PARSING_FAILED_TITLE,
                 PARSING_FAILED_MESSAGE
+        );
+    }
+
+    @Transactional
+    public void notifyDocumentPendingReview(Long userId, UUID documentId, String vehicleLabel) {
+        String label = vehicleLabel == null || vehicleLabel.isBlank() ? "the selected vehicle" : vehicleLabel.trim();
+        createDocumentNotification(
+                userId,
+                documentId,
+                NotificationType.DOCUMENT_PENDING_REVIEW,
+                PENDING_REVIEW_TITLE,
+                "For vehicle " + label + " there is a document pending review."
         );
     }
 

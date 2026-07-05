@@ -70,6 +70,22 @@ class UserNotificationServiceTest {
     }
 
     @Test
+    void createsPendingReviewNotificationForAdmin() {
+        when(notificationRepository.save(any(UserNotification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        UUID documentId = UUID.randomUUID();
+
+        notificationService.notifyDocumentPendingReview(30L, documentId, "B123ABC");
+
+        verify(notificationRepository).save(org.mockito.ArgumentMatchers.argThat(notification ->
+                notification.getUserId().equals(30L)
+                        && notification.getDocumentId().equals(documentId)
+                        && notification.getType() == NotificationType.DOCUMENT_PENDING_REVIEW
+                        && notification.getTitle().equals("Document pending review")
+                        && notification.getMessage().equals("For vehicle B123ABC there is a document pending review.")
+        ));
+    }
+
+    @Test
     void listsOnlyCurrentUserNotifications() {
         UserNotification notification = notification(UUID.randomUUID(), 10L, false);
         when(notificationRepository.findByUserIdOrderByCreatedAtDesc(10L)).thenReturn(List.of(notification));

@@ -13,9 +13,15 @@ public interface VehicleDocumentRepository extends JpaRepository<VehicleDocument
 
     Page<VehicleDocument> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
+    List<VehicleDocument> findAllByOrderByCreatedAtDesc();
+
     Page<VehicleDocument> findByBusinessIdOrderByCreatedAtDesc(Long businessId, Pageable pageable);
 
+    List<VehicleDocument> findByBusinessIdOrderByCreatedAtDesc(Long businessId);
+
     Page<VehicleDocument> findByUploadedByUserIdOrderByCreatedAtDesc(Long uploadedByUserId, Pageable pageable);
+
+    List<VehicleDocument> findByUploadedByUserIdOrderByCreatedAtDesc(Long uploadedByUserId);
 
     List<VehicleDocument> findByVehicleIdOrderByCreatedAtDesc(Long vehicleId);
 

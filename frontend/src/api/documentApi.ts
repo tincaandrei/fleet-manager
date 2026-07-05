@@ -19,6 +19,9 @@ export const listDocumentHistory = (page: number, size: number) =>
     params: { page, size },
   });
 
+export const exportDocumentHistoryPdf = () =>
+  api.get<Blob>('/api/documents/history/export', { responseType: 'blob' });
+
 /**
  * Upload a document for a vehicle.
  * The parser determines documentType and documentSubtype automatically —

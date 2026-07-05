@@ -45,4 +45,25 @@ public class AuthUserLookupClient {
             return List.of();
         }
     }
+
+    public List<UserLookupResponse> lookupBusinessAdmins(Long businessId, String authorizationHeader) {
+        if (businessId == null || authorizationHeader == null || authorizationHeader.isBlank()) {
+            return List.of();
+        }
+        try {
+            List<UserLookupResponse> response = restClientBuilder
+                    .baseUrl(authServiceUrl)
+                    .build()
+                    .get()
+                    .uri("/internal/businesses/{businessId}/admins", businessId)
+                    .header(HttpHeaders.AUTHORIZATION, authorizationHeader)
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<>() {
+                    });
+            return response == null ? List.of() : response;
+        } catch (RestClientException exception) {
+            log.warn("Could not lookup business admins from auth-service", exception);
+            return List.of();
+        }
+    }
 }

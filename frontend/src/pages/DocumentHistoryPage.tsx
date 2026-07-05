@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { downloadDocument, listDocumentHistory } from '../api/documentApi';
+import { downloadDocument, exportDocumentHistoryPdf, listDocumentHistory } from '../api/documentApi';
 import { useAuth } from '../auth/useAuth';
 import type { DocumentHistoryItem, DocumentStatus } from '../types/document';
 import DataState from '../components/ui/DataState';
@@ -68,6 +68,7 @@ export default function DocumentHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const title = useMemo(() => {
     if (role === 'SUPERADMIN') return 'All Document History';
@@ -112,6 +113,26 @@ export default function DocumentHistoryPage() {
     }
   };
 
+  const handleExportPdf = async () => {
+    setExportingPdf(true);
+    setError(null);
+    try {
+      const res = await exportDocumentHistoryPdf();
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `document-history-${new Date().toISOString().slice(0, 10)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      setError(apiMessage(err, 'PDF export failed.'));
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   const canGoBack = page > 0;
   const canGoNext = page + 1 < totalPages;
 
@@ -120,7 +141,19 @@ export default function DocumentHistoryPage() {
       <PageHeader
         title={title}
         description={`${totalElements} uploaded document${totalElements === 1 ? '' : 's'}`}
-        actions={<Link to="/vehicles" className="btn btn-secondary">Vehicles</Link>}
+        actions={(
+          <>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => void handleExportPdf()}
+              disabled={exportingPdf || loading}
+            >
+              {exportingPdf ? 'Exporting...' : 'Export PDF'}
+            </button>
+            <Link to="/vehicles" className="btn btn-secondary">Vehicles</Link>
+          </>
+        )}
       />
 
       {loading && <DataState type="loading">Loading document history...</DataState>}

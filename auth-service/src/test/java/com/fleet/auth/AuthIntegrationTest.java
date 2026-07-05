@@ -535,6 +535,31 @@ class AuthIntegrationTest {
     }
 
     @Test
+    void internalBusinessAdminLookupReturnsActiveAdminsForSameBusiness() throws Exception {
+        Business business = createBusiness("Acme Transport", true);
+        Business otherBusiness = createBusiness("Other Transport", true);
+        UserData admin = createUser("manager", "manager@example.com", "password123", Role.BUSINESS_ADMIN, business, null, null);
+        createUser("driver", "driver@example.com", "password123", Role.EMPLOYEE, business, null, null);
+        UserData disabledAdmin = createUser("disabled-admin", "disabled-admin@example.com", "password123", Role.BUSINESS_ADMIN, business, null, null);
+        disabledAdmin.getCredential().setStatus(com.fleet.auth.entity.UserStatus.DISABLED);
+        disabledAdmin.getCredential().setEnabled(false);
+        credentialRepository.save(disabledAdmin.getCredential());
+        createUser("outside-admin", "outside-admin@example.com", "password123", Role.BUSINESS_ADMIN, otherBusiness, null, null);
+
+        String employeeToken = login("driver", "password123");
+        mockMvc.perform(get("/internal/businesses/{businessId}/admins", business.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + employeeToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].userId").value(admin.getUserId()))
+                .andExpect(jsonPath("$[0].role").value("BUSINESS_ADMIN"))
+                .andExpect(jsonPath("$[1]").doesNotExist());
+
+        mockMvc.perform(get("/internal/businesses/{businessId}/admins", otherBusiness.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + employeeToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void openApiEndpointsArePublic() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())

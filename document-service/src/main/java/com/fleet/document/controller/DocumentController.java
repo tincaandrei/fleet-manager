@@ -27,6 +27,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -142,6 +143,26 @@ public class DocumentController {
                 servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
                 authentication
         ));
+    }
+
+    @GetMapping("/history/export")
+    @Operation(summary = "Export document upload history", description = "Exports visible upload history as a PDF.")
+    public ResponseEntity<Resource> exportHistory(
+            HttpServletRequest servletRequest,
+            Authentication authentication
+    ) {
+        byte[] pdf = documentService.exportHistoryPdf(
+                servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
+                authentication
+        );
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .contentLength(pdf.length)
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename("document-history.pdf")
+                        .build()
+                        .toString())
+                .body(new ByteArrayResource(pdf));
     }
 
     @GetMapping("/vehicles/{vehicleId}/documents")

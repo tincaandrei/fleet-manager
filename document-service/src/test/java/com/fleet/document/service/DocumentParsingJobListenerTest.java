@@ -22,6 +22,7 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -39,6 +40,9 @@ class DocumentParsingJobListenerTest {
     @Mock
     private UserNotificationService notificationService;
 
+    @Mock
+    private AuthUserLookupClient authUserLookupClient;
+
     @InjectMocks
     private DocumentParsingJobListener listener;
 
@@ -54,11 +58,21 @@ class DocumentParsingJobListenerTest {
             return null;
         }).when(parserResultService).applyParserResult(document, result);
 
-        listener.parseUploadedDocument(new DocumentUploadedForParsingEvent(document.getId()));
+        when(authUserLookupClient.lookupBusinessAdmins(100L, "Bearer token"))
+                .thenReturn(java.util.List.of(new com.fleet.document.dto.UserLookupResponse(
+                        11L,
+                        "admin",
+                        "admin@example.com",
+                        100L,
+                        "BUSINESS_ADMIN"
+                )));
+
+        listener.parseUploadedDocument(new DocumentUploadedForParsingEvent(document.getId(), "Bearer token", "B123ABC"));
 
         verify(parserResultService).applyParserResult(document, result);
         verify(documentRepository).save(document);
         verify(notificationService).notifyParsingCompleted(10L, document.getId(), false);
+        verify(notificationService).notifyDocumentPendingReview(11L, document.getId(), "B123ABC");
     }
 
     @Test
@@ -72,10 +86,38 @@ class DocumentParsingJobListenerTest {
             parsedDocument.setStatus(DocumentStatus.NEEDS_REVIEW);
             return null;
         }).when(parserResultService).applyParserResult(document, result);
+        when(authUserLookupClient.lookupBusinessAdmins(100L, "Bearer token")).thenReturn(java.util.List.of());
 
-        listener.parseUploadedDocument(new DocumentUploadedForParsingEvent(document.getId()));
+        listener.parseUploadedDocument(new DocumentUploadedForParsingEvent(document.getId(), "Bearer token", "B123ABC"));
 
         verify(notificationService).notifyParsingCompleted(10L, document.getId(), true);
+    }
+
+    @Test
+    void adminNotificationSkipsUploaderWhenUploaderIsBusinessAdmin() {
+        VehicleDocument document = document();
+        ParserResultRequest result = parsedResult(document.getId());
+        when(documentRepository.findById(document.getId())).thenReturn(Optional.of(document));
+        when(documentParsingService.parse(document)).thenReturn(result);
+        doAnswer(invocation -> {
+            VehicleDocument parsedDocument = invocation.getArgument(0);
+            parsedDocument.setStatus(DocumentStatus.NEEDS_REVIEW);
+            return null;
+        }).when(parserResultService).applyParserResult(document, result);
+        when(authUserLookupClient.lookupBusinessAdmins(100L, "Bearer token"))
+                .thenReturn(java.util.List.of(new com.fleet.document.dto.UserLookupResponse(
+                        10L,
+                        "admin-uploader",
+                        "admin-uploader@example.com",
+                        100L,
+                        "BUSINESS_ADMIN"
+                )));
+
+        listener.parseUploadedDocument(new DocumentUploadedForParsingEvent(document.getId(), "Bearer token", "B123ABC"));
+
+        verify(notificationService).notifyParsingCompleted(10L, document.getId(), false);
+        verify(notificationService, org.mockito.Mockito.never())
+                .notifyDocumentPendingReview(any(), any(), any());
     }
 
     @Test
@@ -104,11 +146,12 @@ class DocumentParsingJobListenerTest {
             return null;
         }).when(parserResultService).applyParserResult(document, result);
 
-        listener.parseUploadedDocument(new DocumentUploadedForParsingEvent(document.getId()));
+        listener.parseUploadedDocument(new DocumentUploadedForParsingEvent(document.getId(), "Bearer token", "B123ABC"));
 
         verify(parserResultService).applyParserResult(document, result);
         verify(documentRepository).save(document);
         verify(notificationService).notifyParsingFailed(10L, document.getId());
+        verifyNoInteractions(authUserLookupClient);
     }
 
     private ParserResultRequest parsedResult(UUID documentId) {

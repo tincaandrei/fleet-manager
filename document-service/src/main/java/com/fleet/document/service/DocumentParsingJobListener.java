@@ -27,16 +27,17 @@ public class DocumentParsingJobListener {
     private final DocumentParsingService documentParsingService;
     private final DocumentParserResultService parserResultService;
     private final UserNotificationService notificationService;
+    private final AuthUserLookupClient authUserLookupClient;
 
     @Async("documentParsingExecutor")
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void parseUploadedDocument(DocumentUploadedForParsingEvent event) {
-        documentRepository.findById(event.documentId()).ifPresentOrElse(this::parseDocument, () ->
+        documentRepository.findById(event.documentId()).ifPresentOrElse(document -> parseDocument(document, event), () ->
                 log.warn("Skipping parser job for missing document {}", event.documentId()));
     }
 
-    private void parseDocument(VehicleDocument document) {
+    private void parseDocument(VehicleDocument document, DocumentUploadedForParsingEvent event) {
         if (document.getStatus() != DocumentStatus.PARSING) {
             log.info("Skipping parser job for document {} with status {}", document.getId(), document.getStatus());
             return;
@@ -67,6 +68,7 @@ public class DocumentParsingJobListener {
         parserResultService.applyParserResult(document, parserResult);
         documentRepository.save(document);
         createUploaderNotification(document, parserResult);
+        createAdminPendingReviewNotifications(document, event);
     }
 
     private void createUploaderNotification(VehicleDocument document, ParserResultRequest parserResult) {
@@ -79,5 +81,21 @@ public class DocumentParsingJobListener {
         } else if (document.getStatus() == DocumentStatus.PARSING_FAILED) {
             notificationService.notifyParsingFailed(document.getUploadedByUserId(), document.getId());
         }
+    }
+
+    private void createAdminPendingReviewNotifications(VehicleDocument document, DocumentUploadedForParsingEvent event) {
+        if (document.getStatus() != DocumentStatus.NEEDS_REVIEW) {
+            return;
+        }
+
+        authUserLookupClient.lookupBusinessAdmins(document.getBusinessId(), event.authorizationHeader()).stream()
+                .map(com.fleet.document.dto.UserLookupResponse::userId)
+                .filter(userId -> userId != null && !userId.equals(document.getUploadedByUserId()))
+                .distinct()
+                .forEach(userId -> notificationService.notifyDocumentPendingReview(
+                        userId,
+                        document.getId(),
+                        event.vehicleLabel()
+                ));
     }
 }
