@@ -2,7 +2,8 @@ package com.fleet.document;
 
 import com.fleet.document.dto.VehicleBasicInfoResponse;
 import com.fleet.document.repository.VehicleDocumentRepository;
-import com.fleet.document.service.DocumentParsingJobListener;
+import com.fleet.document.service.AuthUserLookupClient;
+import com.fleet.document.service.DocumentParsingOutboxService;
 import com.fleet.document.service.FleetVehicleClient;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -45,7 +46,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.jpa.show-sql=false",
         "document.storage.path=${java.io.tmpdir}/document-api-integration-storage",
-        "openai.api-key=test-key"
+        "openai.api-key=test-key",
+        "app.rabbitmq.enabled=false"
 })
 class DocumentApiIntegrationTest {
 
@@ -61,7 +63,10 @@ class DocumentApiIntegrationTest {
     private FleetVehicleClient fleetVehicleClient;
 
     @MockBean
-    private DocumentParsingJobListener parsingJobListener;
+    private AuthUserLookupClient authUserLookupClient;
+
+    @MockBean
+    private DocumentParsingOutboxService parsingOutboxService;
 
     @BeforeEach
     void setUp() {
@@ -75,6 +80,8 @@ class DocumentApiIntegrationTest {
                 .thenReturn(new VehicleBasicInfoResponse(
                         1001L, 101L, "B-101-ATL", "Dacia", "Duster", "ACTIVE", null, null
                 ));
+        when(authUserLookupClient.lookupBusinessAdmins(eq(101L), eq(BEARER + token)))
+                .thenReturn(List.of());
 
         MockMultipartFile file = new MockMultipartFile(
                 "file",

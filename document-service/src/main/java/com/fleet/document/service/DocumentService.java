@@ -24,12 +24,11 @@ import com.fleet.document.entity.DocumentType;
 import com.fleet.document.entity.ParserStatus;
 import com.fleet.document.entity.VehicleDocument;
 import com.fleet.document.exception.ResourceNotFoundException;
+import com.fleet.document.messaging.DocumentParsingMessage;
 import com.fleet.document.repository.ApprovedDocumentDataRepository;
 import com.fleet.document.repository.DocumentExtractionDraftRepository;
 import com.fleet.document.repository.VehicleDocumentRepository;
-import com.fleet.document.service.event.DocumentUploadedForParsingEvent;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -64,7 +63,7 @@ public class DocumentService {
     private final DocumentParserResultService parserResultService;
     private final DocumentHistoryPdfExportService historyPdfExportService;
     private final VehicleDocumentAttributeService vehicleDocumentAttributeService;
-    private final ApplicationEventPublisher eventPublisher;
+    private final DocumentParsingOutboxService parsingOutboxService;
 
     private static final Set<DocumentStatus> REJECTABLE_STATUSES = EnumSet.of(
             DocumentStatus.NEEDS_REVIEW,
@@ -106,10 +105,17 @@ public class DocumentService {
                 .uploadedByUserId(SecurityUtils.currentUserId(authentication))
                 .build();
         VehicleDocument savedDocument = documentRepository.save(document);
-        eventPublisher.publishEvent(new DocumentUploadedForParsingEvent(
+        List<Long> adminUserIds = authUserLookupClient
+                .lookupBusinessAdmins(vehicle.businessId(), authorizationHeader)
+                .stream()
+                .map(UserLookupResponse::userId)
+                .filter(userId -> userId != null && !userId.equals(savedDocument.getUploadedByUserId()))
+                .distinct()
+                .toList();
+        parsingOutboxService.enqueue(new DocumentParsingMessage(
                 savedDocument.getId(),
-                authorizationHeader,
-                vehicleLabel(vehicle)
+                vehicleLabel(vehicle),
+                adminUserIds
         ));
         return toResponse(savedDocument, SecurityUtils.canReview(authentication));
     }

@@ -16,10 +16,9 @@ import com.fleet.document.entity.VehicleDocument;
 import com.fleet.document.repository.ApprovedDocumentDataRepository;
 import com.fleet.document.repository.DocumentExtractionDraftRepository;
 import com.fleet.document.repository.VehicleDocumentRepository;
-import com.fleet.document.service.event.DocumentUploadedForParsingEvent;
+import com.fleet.document.messaging.DocumentParsingMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.springframework.context.ApplicationEventPublisher;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -77,7 +76,7 @@ class DocumentServiceTest {
     private VehicleDocumentAttributeService vehicleDocumentAttributeService;
 
     @Mock
-    private ApplicationEventPublisher eventPublisher;
+    private DocumentParsingOutboxService parsingOutboxService;
 
     @Mock
     private MultipartFile multipartFile;
@@ -114,6 +113,9 @@ class DocumentServiceTest {
                 "/tmp/stored.pdf"
         ));
         when(documentRepository.save(any(VehicleDocument.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(authUserLookupClient.lookupBusinessAdmins(100L, "Bearer token")).thenReturn(List.of(
+                new UserLookupResponse(11L, "admin", "admin@example.com", 100L, "BUSINESS_ADMIN")
+        ));
         when(approvedDataRepository.findByDocument(any())).thenReturn(Optional.empty());
         when(extractionDraftRepository.findByDocument(any())).thenReturn(Optional.empty());
 
@@ -125,11 +127,11 @@ class DocumentServiceTest {
         assertThat(captor.getValue().getVehicleId()).isEqualTo(1L);
         assertThat(captor.getValue().getUploadedByUserId()).isEqualTo(10L);
 
-        ArgumentCaptor<DocumentUploadedForParsingEvent> eventCaptor = ArgumentCaptor.forClass(DocumentUploadedForParsingEvent.class);
-        verify(eventPublisher).publishEvent(eventCaptor.capture());
-        assertThat(eventCaptor.getValue().documentId()).isEqualTo(captor.getValue().getId());
-        assertThat(eventCaptor.getValue().authorizationHeader()).isEqualTo("Bearer token");
-        assertThat(eventCaptor.getValue().vehicleLabel()).isEqualTo("B123ABC");
+        ArgumentCaptor<DocumentParsingMessage> messageCaptor = ArgumentCaptor.forClass(DocumentParsingMessage.class);
+        verify(parsingOutboxService).enqueue(messageCaptor.capture());
+        assertThat(messageCaptor.getValue().documentId()).isEqualTo(captor.getValue().getId());
+        assertThat(messageCaptor.getValue().vehicleLabel()).isEqualTo("B123ABC");
+        assertThat(messageCaptor.getValue().adminUserIds()).containsExactly(11L);
         verifyNoInteractions(parserResultService);
     }
 

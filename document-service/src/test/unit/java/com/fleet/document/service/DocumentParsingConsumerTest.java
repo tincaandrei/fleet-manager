@@ -7,7 +7,7 @@ import com.fleet.document.entity.ParserStatus;
 import com.fleet.document.entity.TextExtractionMethod;
 import com.fleet.document.entity.VehicleDocument;
 import com.fleet.document.repository.VehicleDocumentRepository;
-import com.fleet.document.service.event.DocumentUploadedForParsingEvent;
+import com.fleet.document.messaging.DocumentParsingMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -26,7 +26,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class DocumentParsingJobListenerTest {
+class DocumentParsingConsumerTest {
 
     @Mock
     private VehicleDocumentRepository documentRepository;
@@ -40,11 +40,8 @@ class DocumentParsingJobListenerTest {
     @Mock
     private UserNotificationService notificationService;
 
-    @Mock
-    private AuthUserLookupClient authUserLookupClient;
-
     @InjectMocks
-    private DocumentParsingJobListener listener;
+    private DocumentParsingConsumer consumer;
 
     @Test
     void successfulParsingSavesNeedsReviewAndNotifiesUploader() {
@@ -58,16 +55,7 @@ class DocumentParsingJobListenerTest {
             return null;
         }).when(parserResultService).applyParserResult(document, result);
 
-        when(authUserLookupClient.lookupBusinessAdmins(100L, "Bearer token"))
-                .thenReturn(java.util.List.of(new com.fleet.document.dto.UserLookupResponse(
-                        11L,
-                        "admin",
-                        "admin@example.com",
-                        100L,
-                        "BUSINESS_ADMIN"
-                )));
-
-        listener.parseUploadedDocument(new DocumentUploadedForParsingEvent(document.getId(), "Bearer token", "B123ABC"));
+        consumer.consume(new DocumentParsingMessage(document.getId(), "B123ABC", java.util.List.of(11L)));
 
         verify(parserResultService).applyParserResult(document, result);
         verify(documentRepository).save(document);
@@ -86,9 +74,7 @@ class DocumentParsingJobListenerTest {
             parsedDocument.setStatus(DocumentStatus.NEEDS_REVIEW);
             return null;
         }).when(parserResultService).applyParserResult(document, result);
-        when(authUserLookupClient.lookupBusinessAdmins(100L, "Bearer token")).thenReturn(java.util.List.of());
-
-        listener.parseUploadedDocument(new DocumentUploadedForParsingEvent(document.getId(), "Bearer token", "B123ABC"));
+        consumer.consume(new DocumentParsingMessage(document.getId(), "B123ABC", java.util.List.of()));
 
         verify(notificationService).notifyParsingCompleted(10L, document.getId(), true);
     }
@@ -104,16 +90,7 @@ class DocumentParsingJobListenerTest {
             parsedDocument.setStatus(DocumentStatus.NEEDS_REVIEW);
             return null;
         }).when(parserResultService).applyParserResult(document, result);
-        when(authUserLookupClient.lookupBusinessAdmins(100L, "Bearer token"))
-                .thenReturn(java.util.List.of(new com.fleet.document.dto.UserLookupResponse(
-                        10L,
-                        "admin-uploader",
-                        "admin-uploader@example.com",
-                        100L,
-                        "BUSINESS_ADMIN"
-                )));
-
-        listener.parseUploadedDocument(new DocumentUploadedForParsingEvent(document.getId(), "Bearer token", "B123ABC"));
+        consumer.consume(new DocumentParsingMessage(document.getId(), "B123ABC", java.util.List.of()));
 
         verify(notificationService).notifyParsingCompleted(10L, document.getId(), false);
         verify(notificationService, org.mockito.Mockito.never())
@@ -146,12 +123,22 @@ class DocumentParsingJobListenerTest {
             return null;
         }).when(parserResultService).applyParserResult(document, result);
 
-        listener.parseUploadedDocument(new DocumentUploadedForParsingEvent(document.getId(), "Bearer token", "B123ABC"));
+        consumer.consume(new DocumentParsingMessage(document.getId(), "B123ABC", java.util.List.of()));
 
         verify(parserResultService).applyParserResult(document, result);
         verify(documentRepository).save(document);
         verify(notificationService).notifyParsingFailed(10L, document.getId());
-        verifyNoInteractions(authUserLookupClient);
+    }
+
+    @Test
+    void duplicateMessageForAlreadyProcessedDocumentIsIgnored() {
+        VehicleDocument document = document();
+        document.setStatus(DocumentStatus.NEEDS_REVIEW);
+        when(documentRepository.findById(document.getId())).thenReturn(Optional.of(document));
+
+        consumer.consume(new DocumentParsingMessage(document.getId(), "B123ABC", java.util.List.of(11L)));
+
+        verifyNoInteractions(documentParsingService, parserResultService, notificationService);
     }
 
     private ParserResultRequest parsedResult(UUID documentId) {

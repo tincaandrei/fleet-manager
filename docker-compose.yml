@@ -176,6 +176,8 @@ services:
         condition: service_started
       auth-service:
         condition: service_started
+      rabbitmq:
+        condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://document-postgres:5432/${DOCUMENT_DB_NAME:-document_deploy}
@@ -191,6 +193,10 @@ services:
       OPENAI_MAX_OUTPUT_TOKENS: ${OPENAI_MAX_OUTPUT_TOKENS:-1500}
       OPENAI_TEMPERATURE: ${OPENAI_TEMPERATURE:-0}
       DOCUMENT_STORAGE_PATH: /app/document-storage
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER:-fleet}
+      RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS:-fleet}
     volumes:
       - document-storage-data:/app/document-storage
     networks:
@@ -208,6 +214,12 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-fleet}
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - fleet-net
     ports:

@@ -47,7 +47,7 @@ Public self-registration is disabled. Users are created by an administrator and 
 
 Each backend service owns a separate PostgreSQL database. Uploaded files are stored in Docker named volumes. Traefik exposes the frontend and APIs through port 80.
 
-RabbitMQ is also provisioned by Docker Compose for broker development, but the current document parsing workflow runs asynchronously inside `document-service` and does not depend on RabbitMQ.
+RabbitMQ carries durable document parsing jobs. Uploads and their outbox records are committed together in PostgreSQL, an outbox publisher sends confirmed messages to RabbitMQ, and `document-service` consumes them asynchronously. Failed deliveries are retried three times and then routed to `doccufleet.document.parsing.dlq`.
 
 ## Access Model
 
@@ -275,7 +275,7 @@ curl -X POST "http://localhost/api/documents" \
   -F "vehicleId=1"
 ```
 
-The endpoint returns `202 Accepted` while extraction continues asynchronously. Documents that cannot be accepted automatically are made available to authorized administrators for review.
+The endpoint returns `202 Accepted` after the document and its parsing outbox event are stored. RabbitMQ then dispatches the extraction job asynchronously. Documents that cannot be accepted automatically are made available to authorized administrators for review.
 
 List documents for a vehicle:
 
