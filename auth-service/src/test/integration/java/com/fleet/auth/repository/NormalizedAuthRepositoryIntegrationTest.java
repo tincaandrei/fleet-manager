@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 @TestPropertySource(properties = {
         "spring.jpa.hibernate.ddl-auto=create-drop"
 })
-class NormalizedAuthRepositoryTest {
+class NormalizedAuthRepositoryIntegrationTest {
 
     @Autowired
     private RoleEntityRepository roleEntityRepository;

@@ -9,6 +9,7 @@ import {
 } from '../api/notificationApi';
 import { getMe } from '../api/authApi';
 import UserAvatar from './UserAvatar';
+import BrandLogo from './BrandLogo';
 import type { NotificationResponse } from '../types/notification';
 
 type NavItem = {
@@ -265,10 +266,7 @@ export default function Navbar() {
 
   return (
     <nav className="navbar">
-      <span className="navbar-brand">
-        <span className="navbar-brand-dot" aria-hidden="true" />
-        Fleet Manager
-      </span>
+      <BrandLogo className="navbar-brand" />
 
       <div className="nav-group" role="navigation" aria-label="Main navigation">
         {visibleNavItems.map((item) => renderNavLink(item, 'nav-link'))}
@@ -315,10 +313,7 @@ export default function Navbar() {
         aria-hidden={!isMenuOpen}
       >
         <div className="mobile-menu-header">
-          <span className="navbar-brand">
-            <span className="navbar-brand-dot" aria-hidden="true" />
-            Fleet Manager
-          </span>
+          <BrandLogo className="navbar-brand" />
           <button
             type="button"
             className="mobile-menu-close"

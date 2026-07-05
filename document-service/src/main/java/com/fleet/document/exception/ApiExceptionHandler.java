@@ -45,6 +45,11 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(new ErrorResponse("Uploaded file is too large"));
     }
 
+    @ExceptionHandler(ExternalServiceException.class)
+    public ResponseEntity<ErrorResponse> handleExternalService(ExternalServiceException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(new ErrorResponse(ex.getMessage()));
+    }
+
     @ExceptionHandler({IllegalArgumentException.class, FileStorageException.class})
     public ResponseEntity<ErrorResponse> handleIllegalArgument(RuntimeException ex) {
         return ResponseEntity.badRequest().body(new ErrorResponse(ex.getMessage()));

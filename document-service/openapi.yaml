@@ -1,9 +1,9 @@
 openapi: 3.0.1
 info:
-  title: Fleet Manager Document Service API
-  description: "Document upload, review, and approved data APIs for Fleet Manager."
+  title: DoccuFleet Document Service API
+  description: "Document upload, review, and approved data APIs for DoccuFleet."
   contact:
-    name: Fleet Manager Team
+    name: DoccuFleet Team
   version: 1.0.0
 servers:
 - url: /api/documents
@@ -11,6 +11,8 @@ servers:
 tags:
 - name: Documents
   description: "Vehicle document upload, review, and download endpoints."
+- name: Notifications
+  description: In-app user notifications.
 paths:
   /{id}/review:
     post:
@@ -128,6 +130,12 @@ paths:
               $ref: "#/components/schemas/ParserResultRequest"
         required: true
       responses:
+        "200":
+          description: Parser result accepted
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
         "400":
           description: Invalid parser result
           content:
@@ -136,12 +144,6 @@ paths:
                 $ref: "#/components/schemas/DocumentResponse"
         "404":
           description: Document not found
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/DocumentResponse"
-        "200":
-          description: Parser result accepted
           content:
             '*/*':
               schema:
@@ -298,7 +300,8 @@ paths:
       tags:
       - Documents
       summary: Upload document
-      description: "Uploads a PDF for a vehicle, stores it, and marks it as PARSING."
+      description: "Uploads a PDF or image for a vehicle, stores it, and marks it\
+        \ as PARSING."
       operationId: upload_1
       parameters:
       - name: vehicleId
@@ -319,7 +322,7 @@ paths:
               properties:
                 file:
                   type: string
-                  description: PDF file to upload.
+                  description: "PDF, JPG, JPEG, or PNG file to upload."
                   format: binary
       responses:
         "403":
@@ -328,8 +331,8 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/DocumentResponse"
-        "200":
-          description: Document uploaded
+        "202":
+          description: Document uploaded and parsing queued
           content:
             '*/*':
               schema:
@@ -348,6 +351,41 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
       security:
       - bearerAuth: []
+  /notifications/{id}/read:
+    patch:
+      tags:
+      - Notifications
+      operationId: markRead
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/NotificationResponse"
+      security:
+      - bearerAuth: []
+  /notifications/read-all:
+    patch:
+      tags:
+      - Notifications
+      operationId: markAllRead
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/MarkAllNotificationsReadResponse"
+      security:
+      - bearerAuth: []
   /{id}:
     get:
       tags:
@@ -364,12 +402,6 @@ paths:
           type: string
           format: uuid
       responses:
-        "200":
-          description: Document returned
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/DocumentResponse"
         "404":
           description: Document not found
           content:
@@ -382,6 +414,36 @@ paths:
             '*/*':
               schema:
                 $ref: "#/components/schemas/DocumentResponse"
+        "200":
+          description: Document returned
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentResponse"
+      security:
+      - bearerAuth: []
+  /{id}/info-folder:
+    get:
+      tags:
+      - Documents
+      summary: Document info folder
+      description: Returns canonical and extra extracted metadata for a document.
+      operationId: infoFolder
+      parameters:
+      - name: id
+        in: path
+        description: Document id.
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DocumentInfoFolderResponse"
       security:
       - bearerAuth: []
   /{id}/download:
@@ -389,7 +451,7 @@ paths:
       tags:
       - Documents
       summary: Download document
-      description: Downloads the stored PDF file. Requires authentication.
+      description: Downloads the stored document file. Requires authentication.
       operationId: download
       parameters:
       - name: id
@@ -400,6 +462,13 @@ paths:
           type: string
           format: uuid
       responses:
+        "200":
+          description: Document file returned
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
         "404":
           description: Document not found
           content:
@@ -409,13 +478,6 @@ paths:
                 format: binary
         "401":
           description: Authentication required
-          content:
-            '*/*':
-              schema:
-                type: string
-                format: binary
-        "200":
-          description: PDF file returned
           content:
             '*/*':
               schema:
@@ -513,6 +575,14 @@ paths:
       description: Returns documents with NEEDS_REVIEW status. Requires STAFF or ADMIN.
       operationId: reviewQueue
       responses:
+        "200":
+          description: Review queue returned
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DocumentResponse"
         "403":
           description: STAFF or ADMIN role required
           content:
@@ -529,14 +599,159 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/DocumentResponse"
+      security:
+      - bearerAuth: []
+  /reports/vehicle-costs/export:
+    get:
+      tags:
+      - Documents
+      summary: Export vehicle costs
+      description: "Exports visible vehicles, approved document costs, and expiration\
+        \ dates as an Excel workbook. Requires SUPERADMIN or BUSINESS_ADMIN."
+      operationId: exportVehicleCosts
+      responses:
         "200":
-          description: Review queue returned
+          description: Excel workbook returned
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        "403":
+          description: Administrator role required
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Authentication required
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        "502":
+          description: Fleet Service could not provide visible vehicles
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+      security:
+      - bearerAuth: []
+  /notifications:
+    get:
+      tags:
+      - Notifications
+      operationId: list
+      responses:
+        "200":
+          description: OK
           content:
             '*/*':
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/DocumentResponse"
+                  $ref: "#/components/schemas/NotificationResponse"
+      security:
+      - bearerAuth: []
+  /notifications/unread-count:
+    get:
+      tags:
+      - Notifications
+      operationId: unreadCount
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/UnreadNotificationCountResponse"
+      security:
+      - bearerAuth: []
+  /history:
+    get:
+      tags:
+      - Documents
+      summary: Document upload history
+      description: Returns upload history visible to the current user.
+      operationId: history
+      parameters:
+      - name: page
+        in: query
+        description: Zero-based page index.
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+        example: 0
+      - name: size
+        in: query
+        description: "Page size, capped at 100."
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+        example: 20
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/PagedResponseDocumentHistoryResponse"
+      security:
+      - bearerAuth: []
+  /history/export:
+    get:
+      tags:
+      - Documents
+      summary: Export document upload history
+      description: Exports visible upload history as a PDF.
+      operationId: exportHistory
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+      security:
+      - bearerAuth: []
+  /alerts/vehicles:
+    get:
+      tags:
+      - Documents
+      summary: Grouped vehicle document alerts
+      description: Returns visible vehicles with their expired/upcoming document alerts.
+      operationId: groupedVehicleAlerts
+      parameters:
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 30
+      - name: includeExpired
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VehicleAlertGroupResponse"
       security:
       - bearerAuth: []
   /alerts/document-expirations:
@@ -651,6 +866,8 @@ components:
           enum:
           - PDFBOX
           - OCR
+        llmUsage:
+          $ref: "#/components/schemas/LlmUsageDto"
         parserStatus:
           type: string
           enum:
@@ -670,14 +887,19 @@ components:
         vehicleId:
           type: integer
           format: int64
+        businessId:
+          type: integer
+          format: int64
         documentType:
           type: string
           enum:
-          - INSPECTION
           - INSURANCE
-          - INVOICE
-          - REGISTRATION
+          - TECHNICAL_INSPECTION
+          - ROAD_TAX
+          - EXPENSE_INVOICE
           - OTHER
+        documentSubtype:
+          type: string
         status:
           type: string
           enum:
@@ -712,6 +934,25 @@ components:
         approvedData:
           $ref: "#/components/schemas/ApprovedDocumentDataResponse"
       description: Document metadata with approved review data.
+    LlmUsageDto:
+      type: object
+      properties:
+        provider:
+          type: string
+        model:
+          type: string
+        requestId:
+          type: string
+        inputTokens:
+          type: integer
+          format: int32
+        outputTokens:
+          type: integer
+          format: int32
+        totalTokens:
+          type: integer
+          format: int32
+      description: LLM provider usage metadata for a parser request.
     RejectDocumentRequest:
       type: object
       properties:
@@ -751,6 +992,8 @@ components:
           enum:
           - PDFBOX
           - OCR
+        llmUsage:
+          $ref: "#/components/schemas/LlmUsageDto"
         extractedData:
           type: object
           additionalProperties:
@@ -799,6 +1042,80 @@ components:
           description: Human-readable error message.
           example: "Document not found: 7b9b2a0f-2b4f-4a9a-a80e-70dcda3cf9a8"
       description: Error response returned for validation and business rule failures.
+    NotificationResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: integer
+          format: int64
+        documentId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+          - DOCUMENT_PARSING_COMPLETED
+          - DOCUMENT_PARSING_FAILED
+          - DOCUMENT_PENDING_REVIEW
+        title:
+          type: string
+        message:
+          type: string
+        isRead:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    MarkAllNotificationsReadResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+          format: int64
+    DocumentInfoFolderResponse:
+      type: object
+      properties:
+        documentId:
+          type: string
+          format: uuid
+        vehicleId:
+          type: integer
+          format: int64
+        businessId:
+          type: integer
+          format: int64
+        documentType:
+          type: string
+          enum:
+          - INSURANCE
+          - TECHNICAL_INSPECTION
+          - ROAD_TAX
+          - EXPENSE_INVOICE
+          - OTHER
+        documentSubtype:
+          type: string
+        status:
+          type: string
+          enum:
+          - PARSING
+          - PARSING_FAILED
+          - NEEDS_REVIEW
+          - VALIDATED
+          - REJECTED
+          - ARCHIVED
+        originalFileName:
+          type: string
+        canonicalFields:
+          type: object
+          additionalProperties:
+            type: object
+        extraFields:
+          type: object
+          additionalProperties:
+            type: object
     VehicleDocumentAttributeResponse:
       type: object
       properties:
@@ -806,6 +1123,9 @@ components:
           type: string
           format: uuid
         vehicleId:
+          type: integer
+          format: int64
+        businessId:
           type: integer
           format: int64
         documentId:
@@ -845,6 +1165,106 @@ components:
           type: string
           format: date-time
       description: Normalized vehicle document attribute used for expiration alerts.
+    UnreadNotificationCountResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+          format: int64
+    DocumentHistoryResponse:
+      type: object
+      properties:
+        documentId:
+          type: string
+          format: uuid
+        originalFileName:
+          type: string
+        contentType:
+          type: string
+        fileSize:
+          type: integer
+          format: int64
+        vehicleId:
+          type: integer
+          format: int64
+        businessId:
+          type: integer
+          format: int64
+        documentType:
+          type: string
+          enum:
+          - INSURANCE
+          - TECHNICAL_INSPECTION
+          - ROAD_TAX
+          - EXPENSE_INVOICE
+          - OTHER
+        documentSubtype:
+          type: string
+        status:
+          type: string
+          enum:
+          - PARSING
+          - PARSING_FAILED
+          - NEEDS_REVIEW
+          - VALIDATED
+          - REJECTED
+          - ARCHIVED
+        uploadedByUserId:
+          type: integer
+          format: int64
+        uploadedByUsername:
+          type: string
+        uploadedByEmail:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    PagedResponseDocumentHistoryResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentHistoryResponse"
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+          format: int32
+    VehicleAlertGroupResponse:
+      type: object
+      properties:
+        vehicleId:
+          type: integer
+          format: int64
+        businessId:
+          type: integer
+          format: int64
+        licensePlate:
+          type: string
+        brand:
+          type: string
+        model:
+          type: string
+        assignedUserId:
+          type: integer
+          format: int64
+        assignedDriverName:
+          type: string
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/VehicleDocumentAttributeResponse"
   securitySchemes:
     bearerAuth:
       type: http

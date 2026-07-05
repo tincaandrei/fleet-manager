@@ -1,9 +1,9 @@
 openapi: 3.0.1
 info:
-  title: Fleet Manager Auth Service API
-  description: JWT authentication and user role management APIs for Fleet Manager.
+  title: DoccuFleet Auth Service API
+  description: JWT authentication and user role management APIs for DoccuFleet.
   contact:
-    name: Fleet Manager Team
+    name: DoccuFleet Team
   version: 1.0.0
 servers:
 - url: /api/auth

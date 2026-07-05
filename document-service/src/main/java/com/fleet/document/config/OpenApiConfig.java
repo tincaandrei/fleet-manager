@@ -18,10 +18,10 @@ public class OpenApiConfig {
     public OpenAPI documentServiceOpenApi() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("Fleet Manager Document Service API")
+                        .title("DoccuFleet Document Service API")
                         .version("1.0.0")
-                        .description("Document upload, review, and approved data APIs for Fleet Manager.")
-                        .contact(new Contact().name("Fleet Manager Team")))
+                        .description("Document upload, review, and approved data APIs for DoccuFleet.")
+                        .contact(new Contact().name("DoccuFleet Team")))
                 .servers(List.of(new Server()
                         .url("/api/documents")
                         .description("Document service through Traefik")))

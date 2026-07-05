@@ -1,6 +1,6 @@
 # Context pentru redactarea documentatiei de licenta
 
-Acest document este un rezumat al proiectului **Fleet Manager** si poate fi folosit ca prompt/context initial pentru ChatGPT atunci cand redactez capitolele lucrarii de licenta. Scopul este ca asistentul sa inteleaga rapid domeniul, arhitectura, functionalitatile si stadiul implementarii, fara sa fie nevoie sa analizeze din nou intregul cod sursa.
+Acest document este un rezumat al proiectului **DoccuFleet** si poate fi folosit ca prompt/context initial pentru ChatGPT atunci cand redactez capitolele lucrarii de licenta. Scopul este ca asistentul sa inteleaga rapid domeniul, arhitectura, functionalitatile si stadiul implementarii, fara sa fie nevoie sa analizeze din nou intregul cod sursa.
 
 Important: nu include in documentatie valori reale din `.env`, parole, secrete JWT sau chei interne. Foloseste doar denumiri generice precum `JWT_SECRET`, `DOCUMENT_DB_PASSWORD` sau `OPENAI_MODEL`.
 
@@ -532,7 +532,7 @@ Anexe posibile:
 Poti copia textul urmator intr-o conversatie noua:
 
 ```text
-Vreau sa ma ajuti sa redactez documentatia pentru lucrarea mea de licenta. Tema este o aplicatie web numita Fleet Manager, pentru managementul flotelor auto, dezvoltata cu microservicii Spring Boot, PostgreSQL, React, Docker Compose, Traefik si parsare interna de documente PDF in Document Service, bazata pe PDFBox si Ollama.
+Vreau sa ma ajuti sa redactez documentatia pentru lucrarea mea de licenta. Tema este o aplicatie web numita DoccuFleet, pentru managementul flotelor auto, dezvoltata cu microservicii Spring Boot, PostgreSQL, React, Docker Compose, Traefik si parsare interna de documente PDF in Document Service, bazata pe PDFBox si Ollama.
 
 Foloseste contextul tehnic de mai jos ca sursa principala. Redacteaza in limba romana, intr-un stil academic, clar si coerent. Nu inventa functionalitati care nu sunt mentionate. Cand informatia nu este suficienta, intreaba-ma.
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { acceptInvitation, validateInvitation } from '../api/authApi';
 import { getApiErrorMessage } from '../utils/apiError';
+import BrandLogo from '../components/BrandLogo';
 
 export default function AcceptInvitePage() {
   const [searchParams] = useSearchParams();
@@ -59,10 +60,7 @@ export default function AcceptInvitePage() {
   return (
     <div className="auth-bg">
       <div className="auth-card">
-        <div className="auth-brand">
-          <span className="auth-brand-dot" aria-hidden="true" />
-          <span className="auth-brand-text">Fleet Manager</span>
-        </div>
+        <BrandLogo className="auth-brand" />
 
         <h1>Accept Invitation</h1>
         <h2>{email ? `Set password for ${email}` : 'Set your account password'}</h2>

@@ -14,6 +14,7 @@ import com.fleet.document.dto.VehicleAlertGroupResponse;
 import com.fleet.document.dto.VehicleDocumentAttributeResponse;
 import com.fleet.document.entity.VehicleDocument;
 import com.fleet.document.service.DocumentService;
+import com.fleet.document.service.VehicleCostReportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -44,6 +45,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -66,6 +68,7 @@ public class DocumentController {
             """;
 
     private final DocumentService documentService;
+    private final VehicleCostReportService vehicleCostReportService;
 
     @PostMapping(path = {"", "/"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload document", description = "Uploads a PDF or image for a vehicle, stores it, and marks it as PARSING.")
@@ -163,6 +166,36 @@ public class DocumentController {
                         .build()
                         .toString())
                 .body(new ByteArrayResource(pdf));
+    }
+
+    @GetMapping("/reports/vehicle-costs/export")
+    @Operation(
+            summary = "Export vehicle costs",
+            description = "Exports visible vehicles, approved document costs, and expiration dates as an Excel workbook. Requires SUPERADMIN or BUSINESS_ADMIN."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Excel workbook returned"),
+            @ApiResponse(responseCode = "401", description = "Authentication required"),
+            @ApiResponse(responseCode = "403", description = "Administrator role required"),
+            @ApiResponse(responseCode = "502", description = "Fleet Service could not provide visible vehicles")
+    })
+    public ResponseEntity<Resource> exportVehicleCosts(
+            HttpServletRequest servletRequest,
+            Authentication authentication
+    ) {
+        byte[] workbook = vehicleCostReportService.export(
+                servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
+                authentication
+        );
+        String fileName = "fleet-costs-" + LocalDate.now() + ".xlsx";
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .contentLength(workbook.length)
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename(fileName)
+                        .build()
+                        .toString())
+                .body(new ByteArrayResource(workbook));
     }
 
     @GetMapping("/vehicles/{vehicleId}/documents")

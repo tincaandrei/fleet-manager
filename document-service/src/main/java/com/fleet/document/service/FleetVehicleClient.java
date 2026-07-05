@@ -1,6 +1,7 @@
 package com.fleet.document.service;
 
 import com.fleet.document.dto.VehicleBasicInfoResponse;
+import com.fleet.document.exception.ExternalServiceException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -48,6 +49,22 @@ public class FleetVehicleClient {
             return response == null ? List.of() : Arrays.asList(response);
         } catch (RestClientException ex) {
             throw new IllegalArgumentException("Could not load visible vehicles");
+        }
+    }
+
+    public List<VehicleBasicInfoResponse> visibleVehicles(String authorizationHeader) {
+        try {
+            VehicleBasicInfoResponse[] response = restClientBuilder
+                    .baseUrl(fleetServiceUrl)
+                    .build()
+                    .get()
+                    .uri("/vehicles")
+                    .header(HttpHeaders.AUTHORIZATION, authorizationHeader)
+                    .retrieve()
+                    .body(VehicleBasicInfoResponse[].class);
+            return response == null ? List.of() : Arrays.asList(response);
+        } catch (RestClientException ex) {
+            throw new ExternalServiceException("Could not load visible vehicles from Fleet Service", ex);
         }
     }
 }

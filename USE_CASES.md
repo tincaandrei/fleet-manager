@@ -1,0 +1,33 @@
+# Use case-uri DoccuFleet
+
+- Autentificarea utilizatorului
+- Activarea contului prin invitație
+- Crearea unei organizații
+- Modificarea unei organizații
+- Atribuirea unui cont unei organizații
+- Listarea utilizatorilor organizației
+- Invitarea unui utilizator
+- Schimbarea rolului unui utilizator
+- Activarea sau dezactivarea unui cont
+- Listarea și filtrarea vehiculelor
+- Vizualizarea unui vehicul
+- Crearea unui vehicul
+- Modificarea unui vehicul
+- Atribuirea unui vehicul
+- Schimbarea stării vehiculului
+- Ștergerea unui vehicul
+- Încărcarea și procesarea unui document
+- Listarea documentelor unui vehicul
+- Verificarea și aprobarea unui document
+- Respingerea unui document
+- Descărcarea unui document
+- Arhivarea unui document
+- Vizualizarea conformității vehiculului
+- Consultarea alertelor de expirare
+- Consultarea și exportarea rapoartelor
+- Urmărirea procesării unui document
+- Vizualizarea datelor extrase din document
+- Consultarea notificărilor
+- Marcarea notificărilor ca citite
+- Gestionarea imaginii vehiculului
+- Consultarea istoricului documentelor
