@@ -1,0 +1,366 @@
+name: doccufleet-prod
+
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  traefik:
+    image: traefik:v3.6
+    restart: unless-stopped
+    command:
+      - --api.dashboard=false
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.web.http.redirections.entrypoint.permanent=true
+      - --ping=true
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:?Set ACME_EMAIL in .env.prod}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      - --log.level=INFO
+      - --accesslog=true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-letsencrypt:/letsencrypt
+    networks:
+      - fleet-net
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    mem_limit: 96m
+    cpus: 0.20
+    logging: *default-logging
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+    restart: unless-stopped
+    expose:
+      - "80"
+    networks:
+      - fleet-net
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "doccufleet-prod_fleet-net"
+
+      traefik.http.routers.frontend-http.entrypoints: websecure
+      traefik.http.routers.frontend-http.priority: "1"
+      traefik.http.routers.frontend-http.rule: "Host(`doccufleet.eu`) || Host(`www.doccufleet.eu`)"
+      traefik.http.routers.frontend-http.tls: "true"
+      traefik.http.routers.frontend-http.tls.certresolver: letsencrypt
+      traefik.http.routers.frontend-http.service: frontend
+
+      traefik.http.services.frontend.loadbalancer.server.port: "80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    mem_limit: 64m
+    cpus: 0.15
+    logging: *default-logging
+
+  auth-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${AUTH_DB_NAME:?Set AUTH_DB_NAME in .env.prod}
+      POSTGRES_USER: ${AUTH_DB_USER:?Set AUTH_DB_USER in .env.prod}
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:?Set AUTH_DB_PASSWORD in .env.prod}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - max_connections=30
+    volumes:
+      - auth-postgres-data:/var/lib/postgresql/data
+    networks:
+      - fleet-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 15s
+    mem_limit: 192m
+    cpus: 0.25
+    logging: *default-logging
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      auth-postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://auth-postgres:5432/${AUTH_DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${AUTH_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${AUTH_DB_PASSWORD}
+      SPRING_JPA_SHOW_SQL: "false"
+      SPRING_H2_CONSOLE_ENABLED: "false"
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      JAVA_TOOL_OPTIONS: -Xms96m -Xmx384m -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.prod}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:?Set BOOTSTRAP_ADMIN_USERNAME in .env.prod}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:?Set BOOTSTRAP_ADMIN_EMAIL in .env.prod}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD in .env.prod}
+      PROFILE_IMAGE_STORAGE_PATH: ${PROFILE_IMAGE_STORAGE_PATH:-/app/profile-images}
+      FRONTEND_URL: ${FRONTEND_URL:?Set FRONTEND_URL in .env.prod}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?Set ALLOWED_ORIGINS in .env.prod}
+      INVITATION_EXPIRY_HOURS: ${INVITATION_EXPIRY_HOURS:-24}
+      MAIL_HOST: ${MAIL_HOST:?Set MAIL_HOST in .env.prod}
+      MAIL_PORT: ${MAIL_PORT:?Set MAIL_PORT in .env.prod}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:?Set MAIL_FROM in .env.prod}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-true}
+      MAIL_SMTP_STARTTLS_ENABLE: ${MAIL_SMTP_STARTTLS_ENABLE:-true}
+      MAIL_DEBUG: "false"
+    volumes:
+      - auth-profile-images:${PROFILE_IMAGE_STORAGE_PATH:-/app/profile-images}
+    expose:
+      - "8080"
+    networks:
+      - fleet-net
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.auth-http.entrypoints: web
+      traefik.http.routers.auth-http.rule: PathPrefix(`/api/auth`)
+      traefik.http.routers.auth-http.priority: "100"
+      traefik.http.routers.auth-http.middlewares: auth-strip
+      traefik.http.middlewares.auth-strip.stripprefix.prefixes: /api/auth
+      traefik.http.services.auth.loadbalancer.server.port: "8080"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    mem_limit: 576m
+    cpus: 0.45
+    logging: *default-logging
+
+  fleet-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${FLEET_DB_NAME:?Set FLEET_DB_NAME in .env.prod}
+      POSTGRES_USER: ${FLEET_DB_USER:?Set FLEET_DB_USER in .env.prod}
+      POSTGRES_PASSWORD: ${FLEET_DB_PASSWORD:?Set FLEET_DB_PASSWORD in .env.prod}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - max_connections=30
+    volumes:
+      - fleet-postgres-data:/var/lib/postgresql/data
+    networks:
+      - fleet-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 15s
+    mem_limit: 192m
+    cpus: 0.25
+    logging: *default-logging
+
+  fleet-service:
+    build:
+      context: ./fleet-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      fleet-postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://fleet-postgres:5432/${FLEET_DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${FLEET_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${FLEET_DB_PASSWORD}
+      SPRING_JPA_SHOW_SQL: "false"
+      SPRING_H2_CONSOLE_ENABLED: "false"
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      JAVA_TOOL_OPTIONS: -Xms96m -Xmx384m -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC
+      JWT_SECRET: ${JWT_SECRET}
+      VEHICLE_IMAGE_STORAGE_PATH: ${VEHICLE_IMAGE_STORAGE_PATH:-/app/vehicle-images}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+    volumes:
+      - fleet-vehicle-images:${VEHICLE_IMAGE_STORAGE_PATH:-/app/vehicle-images}
+    expose:
+      - "8080"
+    networks:
+      - fleet-net
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.fleet-http.entrypoints: web
+      traefik.http.routers.fleet-http.rule: PathPrefix(`/api/fleet`)
+      traefik.http.routers.fleet-http.priority: "100"
+      traefik.http.routers.fleet-http.middlewares: fleet-strip
+      traefik.http.middlewares.fleet-strip.stripprefix.prefixes: /api/fleet
+      traefik.http.services.fleet.loadbalancer.server.port: "8080"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    mem_limit: 576m
+    cpus: 0.45
+    logging: *default-logging
+
+  document-postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DOCUMENT_DB_NAME:?Set DOCUMENT_DB_NAME in .env.prod}
+      POSTGRES_USER: ${DOCUMENT_DB_USER:?Set DOCUMENT_DB_USER in .env.prod}
+      POSTGRES_PASSWORD: ${DOCUMENT_DB_PASSWORD:?Set DOCUMENT_DB_PASSWORD in .env.prod}
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - max_connections=30
+    volumes:
+      - document-postgres-data:/var/lib/postgresql/data
+    networks:
+      - fleet-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 15s
+    mem_limit: 192m
+    cpus: 0.25
+    logging: *default-logging
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?Set RABBITMQ_DEFAULT_USER in .env.prod}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?Set RABBITMQ_DEFAULT_PASS in .env.prod}
+     
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    networks:
+      - fleet-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 25s
+    mem_limit: 384m
+    cpus: 0.30
+    logging: *default-logging
+
+  document-service:
+    build:
+      context: ./document-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      document-postgres:
+        condition: service_healthy
+      fleet-service:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://document-postgres:5432/${DOCUMENT_DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${DOCUMENT_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DOCUMENT_DB_PASSWORD}
+      SPRING_JPA_SHOW_SQL: "false"
+      SPRING_H2_CONSOLE_ENABLED: "false"
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      JAVA_TOOL_OPTIONS: -Xms128m -Xmx512m -XX:MaxMetaspaceSize=192m -XX:+UseSerialGC
+      JWT_SECRET: ${JWT_SECRET}
+      DOCUMENT_STORAGE_PATH: ${DOCUMENT_STORAGE_PATH:-/app/document-storage}
+      FLEET_SERVICE_URL: http://fleet-service:8080
+      AUTH_SERVICE_URL: http://auth-service:8080
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY in .env.prod}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4-mini}
+      OPENAI_TIMEOUT: ${OPENAI_TIMEOUT:-60s}
+      OPENAI_MAX_OUTPUT_TOKENS: ${OPENAI_MAX_OUTPUT_TOKENS:-1500}
+      OPENAI_TEMPERATURE: ${OPENAI_TEMPERATURE:-0}
+      DOCUMENT_OCR_LANGUAGE: ${DOCUMENT_OCR_LANGUAGE:-ron+eng}
+      DOCUMENT_OCR_DPI: ${DOCUMENT_OCR_DPI:-300}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS}
+    volumes:
+      - document-files:${DOCUMENT_STORAGE_PATH:-/app/document-storage}
+    expose:
+      - "8080"
+    networks:
+      - fleet-net
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.documents-http.entrypoints: web
+      traefik.http.routers.documents-http.rule: PathPrefix(`/api/documents`)
+      traefik.http.routers.documents-http.priority: "100"
+      traefik.http.routers.documents-http.middlewares: documents-strip
+      traefik.http.middlewares.documents-strip.stripprefix.prefixes: /api/documents
+      traefik.http.routers.notifications-http.entrypoints: web
+      traefik.http.routers.notifications-http.rule: PathPrefix(`/api/notifications`)
+      traefik.http.routers.notifications-http.priority: "100"
+      traefik.http.routers.notifications-http.middlewares: notifications-strip
+      traefik.http.middlewares.notifications-strip.stripprefix.prefixes: /api
+      traefik.http.services.documents.loadbalancer.server.port: "8080"
+      traefik.http.routers.notifications-http.service: documents
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8080'"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    mem_limit: 896m
+    cpus: 0.70
+    logging: *default-logging
+
+networks:
+  fleet-net:
+    driver: bridge
+
+volumes:
+  traefik-letsencrypt:
+  auth-postgres-data:
+  auth-profile-images:
+  fleet-postgres-data:
+  fleet-vehicle-images:
+  document-postgres-data:
+  document-files:
+  rabbitmq-data:
