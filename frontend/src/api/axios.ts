@@ -2,7 +2,10 @@ import axios from 'axios';
 import { getApiErrorMessage } from '../utils/apiError';
 import { showToast } from '../utils/toast';
 
-const api = axios.create();
+const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+const api = axios.create({
+  baseURL: configuredBaseUrl || undefined,
+});
 
 function isAuthFormRequest(url: string | undefined): boolean {
   if (!url) return false;
