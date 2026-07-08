@@ -3,6 +3,8 @@ import { assignUnassignedUser } from '../../api/authApi';
 import type { Business, UserProfile } from '../../types/auth';
 import DataState from '../ui/DataState';
 import ResponsiveTable from '../ui/ResponsiveTable';
+import Pagination from '../ui/Pagination';
+import { usePagedList } from '../ui/usePagedList';
 import { getApiErrorMessage } from '../../utils/apiError';
 
 interface PendingAccountsSectionProps {
@@ -13,6 +15,7 @@ interface PendingAccountsSectionProps {
 
 export default function PendingAccountsSection({ businesses, users, onAssigned }: PendingAccountsSectionProps) {
   const activeBusinesses = businesses.filter((business) => business.active);
+  const { page, pageCount, pageItems, setPage } = usePagedList(users);
 
   return (
     <section className="management-section">
@@ -30,26 +33,34 @@ export default function PendingAccountsSection({ businesses, users, onAssigned }
       )}
 
       {users.length > 0 && activeBusinesses.length > 0 && (
-        <ResponsiveTable ariaLabel="Pending accounts">
-          <thead>
-            <tr>
-              <th>Username</th>
-              <th>Email</th>
-              <th>Phone</th>
-              <th>Assign Organization</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user) => (
-              <PendingAccountRow
-                key={user.userId}
-                user={user}
-                businesses={activeBusinesses}
-                onAssigned={onAssigned}
-              />
-            ))}
-          </tbody>
-        </ResponsiveTable>
+        <>
+          <ResponsiveTable ariaLabel="Pending accounts">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Assign Organization</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageItems.map((user) => (
+                <PendingAccountRow
+                  key={user.userId}
+                  user={user}
+                  businesses={activeBusinesses}
+                  onAssigned={onAssigned}
+                />
+              ))}
+            </tbody>
+          </ResponsiveTable>
+          <Pagination
+            page={page}
+            pageCount={pageCount}
+            onPageChange={setPage}
+            summary={`${users.length} pending accounts`}
+          />
+        </>
       )}
     </section>
   );

@@ -18,29 +18,33 @@ export default function UserAvatar({ username, imageUrl, className = '' }: UserA
   useEffect(() => {
     let objectUrl: string | null = null;
     let active = true;
-    setSrc(null);
-    setFailed(false);
 
-    if (!imageUrl) {
-      return () => undefined;
-    }
+    const timeoutId = window.setTimeout(() => {
+      setSrc(null);
+      setFailed(false);
 
-    getProfileImage(imageUrl)
-      .then((res) => {
-        if (!active) {
-          return;
-        }
-        objectUrl = URL.createObjectURL(res.data);
-        setSrc(objectUrl);
-      })
-      .catch(() => {
-        if (active) {
-          setFailed(true);
-        }
-      });
+      if (!imageUrl) {
+        return;
+      }
+
+      getProfileImage(imageUrl)
+        .then((res) => {
+          if (!active) {
+            return;
+          }
+          objectUrl = URL.createObjectURL(res.data);
+          setSrc(objectUrl);
+        })
+        .catch(() => {
+          if (active) {
+            setFailed(true);
+          }
+        });
+    }, 0);
 
     return () => {
       active = false;
+      window.clearTimeout(timeoutId);
       if (objectUrl) {
         URL.revokeObjectURL(objectUrl);
       }

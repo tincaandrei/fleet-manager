@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { listBusinesses, listBusinessUsers, listUnassignedUsers } from '../api/authApi';
 import { getVehicles } from '../api/vehicleApi';
 import { listVehicleAlerts } from '../api/documentApi';
@@ -32,7 +32,6 @@ function normalizeTab(value: string | null): WorkspaceTab {
 }
 
 export default function SuperAdminConsolePage() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [businesses, setBusinesses] = useState<Business[]>([]);
@@ -123,40 +122,15 @@ export default function SuperAdminConsolePage() {
     showToast({ type: 'success', message: 'Account assigned to organization.' });
   };
 
-  const handleInviteUser = () => {
-    if (selectedBusiness) {
-      updateParams({ tab: 'users', action: null });
-    } else {
-      showToast({ type: 'info', message: 'Select an organization first to invite a user.' });
-    }
-  };
-
-  const handleNewVehicle = () => {
-    navigate(selectedBusiness ? `/vehicles/new?businessId=${selectedBusiness.id}` : '/vehicles/new');
-  };
-
-  const handleDownloadReports = () => {
-    if (selectedBusiness) {
-      updateParams({ tab: 'reports', action: null });
-    } else {
-      showToast({ type: 'info', message: 'Global downloads are shown in the workspace below.' });
-    }
-  };
-
   return (
     <PageShell className="superadmin-console">
       <PageHeader
         title="Superadmin Console"
         description="Manage organizations, users, vehicles, and reports across the platform."
         actions={(
-          <>
-            <Button onClick={() => updateParams({ action: createOpen ? null : 'new-org' })}>
-              New Organization
-            </Button>
-            <Button variant="secondary" onClick={handleInviteUser}>Invite User</Button>
-            <Button variant="secondary" onClick={handleNewVehicle}>New Vehicle</Button>
-            <Button variant="secondary" onClick={handleDownloadReports}>Download Reports</Button>
-          </>
+          <Button onClick={() => updateParams({ action: createOpen ? null : 'new-org' })}>
+            New Organization
+          </Button>
         )}
       />
 

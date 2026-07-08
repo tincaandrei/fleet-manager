@@ -18,22 +18,26 @@ export default function AcceptInvitePage() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    if (!token) {
-      setError('Password setup token is missing.');
-      setValidating(false);
-      return;
-    }
+    const timeoutId = window.setTimeout(() => {
+      if (!token) {
+        setError('Password setup token is missing.');
+        setValidating(false);
+        return;
+      }
 
-    validateInvitation(token)
-      .then((res) => {
-        if (!res.data.valid) {
-          setError(res.data.message || 'This password setup link is no longer valid.');
-          return;
-        }
-        setEmail(res.data.email);
-      })
-      .catch((err: unknown) => setError(getApiErrorMessage(err, 'This password setup link is no longer valid.')))
-      .finally(() => setValidating(false));
+      validateInvitation(token)
+        .then((res) => {
+          if (!res.data.valid) {
+            setError(res.data.message || 'This password setup link is no longer valid.');
+            return;
+          }
+          setEmail(res.data.email);
+        })
+        .catch((err: unknown) => setError(getApiErrorMessage(err, 'This password setup link is no longer valid.')))
+        .finally(() => setValidating(false));
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [token]);
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -7,6 +7,8 @@ import PageHeader from '../components/ui/PageHeader';
 import { ButtonLink } from '../components/ui/Button';
 import DataState from '../components/ui/DataState';
 import ResponsiveTable from '../components/ui/ResponsiveTable';
+import Pagination from '../components/ui/Pagination';
+import { usePagedList } from '../components/ui/usePagedList';
 import PendingAccountsSection from '../components/superadmin/PendingAccountsSection';
 import { getApiErrorMessage } from '../utils/apiError';
 
@@ -15,6 +17,7 @@ export default function BusinessesPage() {
   const [unassignedUsers, setUnassignedUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { page, pageCount, pageItems, setPage } = usePagedList(businesses);
 
   const load = () => {
     setLoading(true);
@@ -77,7 +80,7 @@ export default function BusinessesPage() {
                 </tr>
               </thead>
               <tbody>
-                {businesses.map((business) => (
+                {pageItems.map((business) => (
                   <tr key={business.id}>
                     <td data-label="ID">{business.id}</td>
                     <td data-label="Name">{business.name}</td>
@@ -94,6 +97,12 @@ export default function BusinessesPage() {
                 ))}
               </tbody>
             </ResponsiveTable>
+            <Pagination
+              page={page}
+              pageCount={pageCount}
+              onPageChange={setPage}
+              summary={`${businesses.length} organizations`}
+            />
           </>
         )}
     </PageShell>
