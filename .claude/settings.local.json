@@ -14,7 +14,17 @@
       "Bash(start \"\" \"e:/Users/Andrei/Politemnita/AN4-PC/licenta/fleet manager/design-mockups/variant3-compact-flux.html\")",
       "Bash(Get-Content \"e:\\\\Users\\\\Andrei\\\\Politemnita\\\\AN4-PC\\\\licenta\\\\fleet manager\\\\frontend\\\\src\\\\index.css\")",
       "Bash(Measure-Object -Line)",
-      "PowerShell(\\(Get-Content \"e:\\\\Users\\\\Andrei\\\\Politemnita\\\\AN4-PC\\\\licenta\\\\fleet manager\\\\frontend\\\\src\\\\index.css\"\\).Count)"
+      "PowerShell(\\(Get-Content \"e:\\\\Users\\\\Andrei\\\\Politemnita\\\\AN4-PC\\\\licenta\\\\fleet manager\\\\frontend\\\\src\\\\index.css\"\\).Count)",
+      "Bash(./mvnw -q compile)",
+      "Bash(docker compose *)",
+      "Bash(docker run *)",
+      "PowerShell(docker run --rm -v \"e:\\\\Users\\\\Andrei\\\\Politemnita\\\\AN4-PC\\\\licenta\\\\fleet manager\\\\auth-service:/app\" -v fleet-m2-cache:/root/.m2 -w /app maven:3.9.9-eclipse-temurin-17 mvn -q verify)",
+      "PowerShell(docker run --rm -v \"e:\\\\Users\\\\Andrei\\\\Politemnita\\\\AN4-PC\\\\licenta\\\\fleet manager\\\\document-service:/app\" -v fleet-m2-cache:/root/.m2 -w /app maven:3.9.9-eclipse-temurin-17 mvn -q verify)",
+      "PowerShell(docker run --rm -v \"e:\\\\Users\\\\Andrei\\\\Politemnita\\\\AN4-PC\\\\licenta\\\\fleet manager\\\\auth-service:/app\" -v fleet-m2-cache:/root/.m2 -w /app maven:3.9.9-eclipse-temurin-17 mvn verify | Select-String -Pattern \"Tests run:|BUILD SUCCESS|BUILD FAILURE|ERROR\"; Write-Output \"EXIT=$LASTEXITCODE\")",
+      "PowerShell(docker run --rm -v \"e:\\\\Users\\\\Andrei\\\\Politemnita\\\\AN4-PC\\\\licenta\\\\fleet manager\\\\document-service:/app\" -v fleet-m2-cache:/root/.m2 -w /app maven:3.9.9-eclipse-temurin-17 mvn verify | Select-String -Pattern \"Tests run:|BUILD SUCCESS|BUILD FAILURE|\\\\[ERROR\\\\]\"; Write-Output \"EXIT=$LASTEXITCODE\")",
+      "Bash(ls \"C:\\\\Users\\\\andut\\\\.claude\\\\projects\\\\e--Users-Andrei-Politemnita-AN4-PC-licenta-fleet-manager\\\\memory\" 2>/dev/null; cat \"C:\\\\Users\\\\andut\\\\.claude\\\\projects\\\\e--Users-Andrei-Politemnita-AN4-PC-licenta-fleet-manager\\\\memory\\\\MEMORY.md\" 2>/dev/null)",
+      "Read(//c/Users/andut/.claude/projects/e--Users-Andrei-Politemnita-AN4-PC-licenta-fleet-manager/memory/**)",
+      "PowerShell(docker run --rm -v \"e:\\\\Users\\\\Andrei\\\\Politemnita\\\\AN4-PC\\\\licenta\\\\fleet manager\\\\fleet-service:/app\" -v fleet-m2-cache:/root/.m2 -w /app maven:3.9.9-eclipse-temurin-17 mvn verify | Select-String -Pattern \"Tests run: \\\\d+, Failures: \\\\d+, Errors: \\\\d+, Skipped: \\\\d+$|BUILD SUCCESS|BUILD FAILURE\"; Write-Output \"EXIT=$LASTEXITCODE\")"
     ]
   }
 }

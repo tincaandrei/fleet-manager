@@ -14,6 +14,7 @@ import DocumentHistoryPage from './pages/DocumentHistoryPage';
 import BusinessesPage from './pages/BusinessesPage';
 import BusinessCreateEditPage from './pages/BusinessCreateEditPage';
 import BusinessUsersPage from './pages/BusinessUsersPage';
+import SuperAdminConsolePage from './pages/SuperAdminConsolePage';
 import PendingOrganizationPage from './pages/PendingOrganizationPage';
 import ToastProvider from './components/ToastProvider';
 import { useAuth } from './auth/useAuth';
@@ -70,6 +71,14 @@ export default function App() {
             />
 
             {/* SUPERADMIN only */}
+            <Route
+              path="/superadmin"
+              element={
+                <ProtectedRoute requiredRoles={['SUPERADMIN']}>
+                  <SuperAdminConsolePage />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/businesses"
               element={

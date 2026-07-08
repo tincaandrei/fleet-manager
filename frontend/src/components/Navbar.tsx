@@ -32,11 +32,11 @@ export default function Navbar() {
 
   const navItems = useMemo<NavItem[]>(
     () => [
-      // SUPERADMIN: organization management
+      // SUPERADMIN: unified console
       {
-        label: 'Organizations',
-        to: '/businesses',
-        activePrefix: '/businesses',
+        label: 'Console',
+        to: '/superadmin',
+        activePrefix: '/superadmin',
         visible: isSuperAdmin,
       },
       // All roles: vehicles

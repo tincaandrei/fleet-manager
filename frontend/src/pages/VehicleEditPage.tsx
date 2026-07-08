@@ -52,7 +52,7 @@ export default function VehicleEditPage() {
         {loadError && <DataState type="error">{loadError}</DataState>}
         {vehicle && (
           <VehicleForm
-            initial={vehicle}
+            initial={{ ...vehicle, businessId: vehicle.businessId ?? undefined }}
             onSubmit={handleSubmit}
             loading={loading}
             error={submitError}

@@ -4,6 +4,8 @@ export type FuelType = 'DIESEL' | 'PETROL' | 'HYBRID' | 'ELECTRIC' | 'LPG' | 'OT
 export type OwnershipType = 'OWNED' | 'LEASED' | 'RENTED' | 'OTHER';
 
 export interface VehicleRequest {
+  /** Target organization. Required for SUPERADMIN-created vehicles, omitted otherwise. */
+  businessId?: number;
   licensePlate: string;
   vin: string;
   brand: string;
@@ -19,7 +21,7 @@ export interface VehicleRequest {
   currentMileage: number;
 }
 
-export interface Vehicle extends VehicleRequest {
+export interface Vehicle extends Omit<VehicleRequest, 'businessId'> {
   id: number;
   businessId: number | null;
   imageUrl: string | null;

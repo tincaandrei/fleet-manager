@@ -274,6 +274,24 @@ public class UserInfoService implements UserDetailsService {
     }
 
     @Transactional
+    public AdminUserResponse sendPasswordResetLink(Long userId, Authentication authentication) {
+        requireAdmin(authentication);
+        UserData userData = getUserData(userId);
+        requireCanManageUser(userData, authentication);
+        if (userData.getCredential().getRole().getRoleName().canonical() == Role.SUPERADMIN) {
+            throw new AccessDeniedException("Access denied");
+        }
+        UserStatus status = userData.getCredential().getStatus() == null
+                ? UserStatus.ACTIVE
+                : userData.getCredential().getStatus();
+        if (status == UserStatus.INVITED) {
+            throw new ApiStatusException(HttpStatus.BAD_REQUEST, "INVITATION_NOT_ACCEPTED");
+        }
+        userInvitationService.createAndSendPasswordReset(userData, currentUserId(authentication));
+        return toAdminUserResponse(userData);
+    }
+
+    @Transactional
     public AdminUserResponse updateUserStatus(Long userId, UpdateUserStatusRequest request, Authentication authentication) {
         requireAdmin(authentication);
         if (request.status() == UserStatus.INVITED) {

@@ -321,7 +321,7 @@ class DocumentServiceTest {
         when(authUserLookupClient.lookupUsers(List.of(20L), "Bearer token"))
                 .thenReturn(List.of(new UserLookupResponse(20L, "user", "user@example.com", 100L, "EMPLOYEE")));
 
-        PagedResponse<?> response = documentService.history(0, 20, "Bearer token", userAuth);
+        PagedResponse<?> response = documentService.history(0, 20, null, "Bearer token", userAuth);
 
         assertThat(response.totalElements()).isEqualTo(1);
         assertThat(response.items()).hasSize(1);
@@ -336,7 +336,7 @@ class DocumentServiceTest {
                 .thenReturn(new PageImpl<>(List.of(document), PageRequest.of(0, 20), 1));
         when(authUserLookupClient.lookupUsers(List.of(30L), "Bearer token")).thenReturn(List.of());
 
-        PagedResponse<?> response = documentService.history(0, 20, "Bearer token", staffAuth);
+        PagedResponse<?> response = documentService.history(0, 20, null, "Bearer token", staffAuth);
 
         assertThat(response.totalElements()).isEqualTo(1);
         verify(documentRepository).findByBusinessIdOrderByCreatedAtDesc(100L, PageRequest.of(0, 20));
@@ -351,7 +351,7 @@ class DocumentServiceTest {
                 .thenReturn(List.of(new UserLookupResponse(30L, "driver", "driver@example.com", 100L, "EMPLOYEE")));
         when(historyPdfExportService.export(any(), any(), anyBoolean())).thenReturn(new byte[]{1, 2, 3});
 
-        byte[] pdf = documentService.exportHistoryPdf("Bearer token", staffAuth);
+        byte[] pdf = documentService.exportHistoryPdf(null, "Bearer token", staffAuth);
 
         assertThat(pdf).containsExactly(1, 2, 3);
         verify(documentRepository).findByBusinessIdOrderByCreatedAtDesc(100L);
@@ -370,7 +370,7 @@ class DocumentServiceTest {
                 .thenReturn(new PageImpl<>(List.of(document), PageRequest.of(0, 20), 1));
         when(authUserLookupClient.lookupUsers(List.of(10L), "Bearer token")).thenReturn(List.of());
 
-        PagedResponse<?> response = documentService.history(0, 20, "Bearer token", superadminAuth);
+        PagedResponse<?> response = documentService.history(0, 20, null, "Bearer token", superadminAuth);
 
         assertThat(response.totalElements()).isEqualTo(1);
         verify(documentRepository).findAllByOrderByCreatedAtDesc(PageRequest.of(0, 20));

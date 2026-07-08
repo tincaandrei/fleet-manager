@@ -60,7 +60,7 @@ class VehicleCostReportServiceTest {
         LocalDate today = LocalDate.now();
         VehicleBasicInfoResponse vehicleWithDocuments = vehicle(1L, 100L, "B-20-XYZ", "Dacia", "Duster", "ACTIVE");
         VehicleBasicInfoResponse vehicleWithoutDocuments = vehicle(2L, 100L, "A-10-ABC", "Ford", "Focus", "SOLD");
-        when(fleetVehicleClient.visibleVehicles("Bearer token"))
+        when(fleetVehicleClient.visibleVehicles("Bearer token", null))
                 .thenReturn(List.of(vehicleWithDocuments, vehicleWithoutDocuments));
 
         VehicleDocumentAttribute invoice = attribute(
@@ -149,7 +149,7 @@ class VehicleCostReportServiceTest {
     void usesExactExpirationBoundariesAndIncludesOrganizationForSuperadmin() throws Exception {
         LocalDate today = LocalDate.now();
         VehicleBasicInfoResponse vehicle = vehicle(5L, 200L, "CJ-01-AAA", "Volvo", "XC60", "INACTIVE");
-        when(fleetVehicleClient.visibleVehicles("Bearer super")).thenReturn(List.of(vehicle));
+        when(fleetVehicleClient.visibleVehicles("Bearer super", null)).thenReturn(List.of(vehicle));
         when(attributeRepository.findByVehicleIdInAndStatusOrderByValidUntilAscCreatedAtDesc(
                 anyList(),
                 org.mockito.ArgumentMatchers.eq(ApprovedDataStatus.ACTIVE)
@@ -181,7 +181,7 @@ class VehicleCostReportServiceTest {
     @Test
     void exportsAmountWithoutCurrencyWithoutAddingItToCurrencyTotals() throws Exception {
         VehicleBasicInfoResponse vehicle = vehicle(7L, 100L, "B-07-NOC", "Dacia", "Logan", "ACTIVE");
-        when(fleetVehicleClient.visibleVehicles("Bearer token")).thenReturn(List.of(vehicle));
+        when(fleetVehicleClient.visibleVehicles("Bearer token", null)).thenReturn(List.of(vehicle));
         when(attributeRepository.findByVehicleIdInAndStatusOrderByValidUntilAscCreatedAtDesc(
                 List.of(7L),
                 ApprovedDataStatus.ACTIVE

@@ -60,6 +60,20 @@ public class UserInvitationService {
     }
 
     @Transactional
+    public void createAndSendPasswordReset(UserData user, Long requestedByAdminId) {
+        invalidateUnusedTokens(user);
+        String rawToken = generateToken();
+        InvitationToken invitationToken = InvitationToken.builder()
+                .user(user)
+                .tokenHash(hashToken(rawToken))
+                .expiresAt(Instant.now().plus(expiryHours, ChronoUnit.HOURS))
+                .createdByAdminId(requestedByAdminId)
+                .build();
+        invitationTokenRepository.save(invitationToken);
+        mailService.sendPasswordResetEmail(user.getEmail(), setupLink(rawToken), expiryHours);
+    }
+
+    @Transactional
     public MessageResponse acceptInvite(AcceptInviteRequest request) {
         validatePassword(request.newPassword());
         InvitationToken invitationToken = requireUsableToken(request.token());
@@ -67,8 +81,11 @@ public class UserInvitationService {
         Credential credential = user.getCredential();
 
         credential.setPasswordHash(passwordEncoder.encode(request.newPassword().trim()));
-        credential.setStatus(UserStatus.ACTIVE);
-        credential.setEnabled(true);
+        // Disabled accounts keep their password but stay disabled until an admin re-enables them.
+        if (credential.getStatus() != UserStatus.DISABLED) {
+            credential.setStatus(UserStatus.ACTIVE);
+            credential.setEnabled(true);
+        }
         credential.setPasswordChangeRequired(false);
         invitationToken.setUsedAt(Instant.now());
 

@@ -19,7 +19,7 @@ export default function AcceptInvitePage() {
 
   useEffect(() => {
     if (!token) {
-      setError('Invitation token is missing.');
+      setError('Password setup token is missing.');
       setValidating(false);
       return;
     }
@@ -27,12 +27,12 @@ export default function AcceptInvitePage() {
     validateInvitation(token)
       .then((res) => {
         if (!res.data.valid) {
-          setError(res.data.message || 'Invitation is no longer valid.');
+          setError(res.data.message || 'This password setup link is no longer valid.');
           return;
         }
         setEmail(res.data.email);
       })
-      .catch((err: unknown) => setError(getApiErrorMessage(err, 'Invitation is no longer valid.')))
+      .catch((err: unknown) => setError(getApiErrorMessage(err, 'This password setup link is no longer valid.')))
       .finally(() => setValidating(false));
   }, [token]);
 
@@ -51,7 +51,7 @@ export default function AcceptInvitePage() {
       setSuccess(true);
       window.setTimeout(() => navigate('/login'), 900);
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Could not accept invitation.'));
+      setError(getApiErrorMessage(err, 'Could not set the password.'));
     } finally {
       setLoading(false);
     }
@@ -62,11 +62,11 @@ export default function AcceptInvitePage() {
       <div className="auth-card">
         <BrandLogo className="auth-brand" />
 
-        <h1>Accept Invitation</h1>
+        <h1>Set Your Password</h1>
         <h2>{email ? `Set password for ${email}` : 'Set your account password'}</h2>
 
-        {validating && <p className="success-note">Checking invitation...</p>}
-        {!validating && success && <p className="success-note">Account activated. Redirecting to login...</p>}
+        {validating && <p className="success-note">Checking password setup link...</p>}
+        {!validating && success && <p className="success-note">Password saved. Redirecting to login...</p>}
         {!validating && error && <p className="error">{error}</p>}
 
         {!validating && !success && !error && (
@@ -94,13 +94,13 @@ export default function AcceptInvitePage() {
             </label>
 
             <button type="submit" disabled={loading}>
-              {loading ? 'Activating...' : 'Activate account'}
+              {loading ? 'Saving...' : 'Save password'}
             </button>
           </form>
         )}
 
         <p>
-          Already activated? <Link to="/login">Sign in</Link>
+          Password already set? <Link to="/login">Sign in</Link>
         </p>
       </div>
     </div>

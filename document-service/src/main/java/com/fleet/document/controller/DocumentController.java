@@ -137,12 +137,15 @@ public class DocumentController {
             @RequestParam(name = "page", required = false, defaultValue = "0") Integer page,
             @Parameter(description = "Page size, capped at 100.", example = "20")
             @RequestParam(name = "size", required = false, defaultValue = "20") Integer size,
+            @Parameter(description = "Filter by business id. SUPERADMIN only; ignored for other roles.", example = "1")
+            @RequestParam(name = "businessId", required = false) Long businessId,
             HttpServletRequest servletRequest,
             Authentication authentication
     ) {
         return ResponseEntity.ok(documentService.history(
                 page,
                 size,
+                businessId,
                 servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
                 authentication
         ));
@@ -151,10 +154,13 @@ public class DocumentController {
     @GetMapping("/history/export")
     @Operation(summary = "Export document upload history", description = "Exports visible upload history as a PDF.")
     public ResponseEntity<Resource> exportHistory(
+            @Parameter(description = "Filter by business id. SUPERADMIN only; ignored for other roles.", example = "1")
+            @RequestParam(name = "businessId", required = false) Long businessId,
             HttpServletRequest servletRequest,
             Authentication authentication
     ) {
         byte[] pdf = documentService.exportHistoryPdf(
+                businessId,
                 servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
                 authentication
         );
@@ -180,10 +186,13 @@ public class DocumentController {
             @ApiResponse(responseCode = "502", description = "Fleet Service could not provide visible vehicles")
     })
     public ResponseEntity<Resource> exportVehicleCosts(
+            @Parameter(description = "Filter by business id. SUPERADMIN only; ignored for other roles.", example = "1")
+            @RequestParam(name = "businessId", required = false) Long businessId,
             HttpServletRequest servletRequest,
             Authentication authentication
     ) {
         byte[] workbook = vehicleCostReportService.export(
+                businessId,
                 servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
                 authentication
         );
