@@ -192,7 +192,7 @@ class AuthIntegrationTest {
                         .content("""
                                 {
                                   "token": "%s",
-                                  "newPassword": "StrongPassword123"
+                                  "newPassword": "StrongPassword123!"
                                 }
                                 """.formatted(rawToken)))
                 .andExpect(status().isOk())
@@ -202,7 +202,7 @@ class AuthIntegrationTest {
         assertEquals(com.fleet.auth.entity.UserStatus.ACTIVE, userData.getCredential().getStatus());
         assertTrue(Boolean.TRUE.equals(userData.getCredential().getEnabled()));
         assertTrue(Boolean.FALSE.equals(userData.getCredential().getPasswordChangeRequired()));
-        assertTrue(passwordEncoder.matches("StrongPassword123", userData.getCredential().getPasswordHash()));
+        assertTrue(passwordEncoder.matches("StrongPassword123!", userData.getCredential().getPasswordHash()));
         assertNotNull(invitationTokenRepository.findAll().get(0).getUsedAt());
 
         mockMvc.perform(post("/accept-invite")
@@ -210,7 +210,7 @@ class AuthIntegrationTest {
                         .content("""
                                 {
                                   "token": "%s",
-                                  "newPassword": "AnotherPassword123"
+                                  "newPassword": "AnotherPassword123!"
                                 }
                                 """.formatted(rawToken)))
                 .andExpect(status().isBadRequest())
@@ -221,13 +221,50 @@ class AuthIntegrationTest {
                         .content("""
                                 {
                                   "token": "not-a-real-token",
-                                  "newPassword": "AnotherPassword123"
+                                  "newPassword": "AnotherPassword123!"
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("INVITATION_TOKEN_INVALID"));
 
-        login("invitee@example.com", "StrongPassword123");
+        login("invitee@example.com", "StrongPassword123!");
+    }
+
+    @Test
+    void inviteAcceptanceRejectsPasswordWithoutSpecialCharacter() throws Exception {
+        String adminToken = login("admin", "admin123");
+
+        mockMvc.perform(post("/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "invitee@example.com",
+                                  "firstName": "Andrei",
+                                  "lastName": "Popescu",
+                                  "roles": ["USER"]
+                                }
+                                """))
+                .andExpect(status().isCreated());
+
+        org.mockito.ArgumentCaptor<String> linkCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(mailService).sendUserInvitationEmail(eq("invitee@example.com"), linkCaptor.capture(), eq(24L));
+        String rawToken = linkCaptor.getValue().substring(linkCaptor.getValue().indexOf("token=") + 6);
+
+        mockMvc.perform(post("/accept-invite")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token": "%s",
+                                  "newPassword": "StrongPassword123"
+                                }
+                                """.formatted(rawToken)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("PASSWORD_TOO_WEAK"));
+
+        UserData userData = userDataRepository.findByEmail("invitee@example.com").orElseThrow();
+        assertEquals(com.fleet.auth.entity.UserStatus.INVITED, userData.getCredential().getStatus());
+        assertNull(invitationTokenRepository.findAll().get(0).getUsedAt());
     }
 
     @Test
@@ -619,16 +656,16 @@ class AuthIntegrationTest {
                         .content("""
                                 {
                                   "token": "%s",
-                                  "newPassword": "BrandNewPassword1"
+                                  "newPassword": "BrandNewPassword1!"
                                 }
                                 """.formatted(secondToken)))
                 .andExpect(status().isOk());
 
         UserData refreshed = userDataRepository.findByEmail("driver@example.com").orElseThrow();
         assertEquals(com.fleet.auth.entity.UserStatus.ACTIVE, refreshed.getCredential().getStatus());
-        assertTrue(passwordEncoder.matches("BrandNewPassword1", refreshed.getCredential().getPasswordHash()));
+        assertTrue(passwordEncoder.matches("BrandNewPassword1!", refreshed.getCredential().getPasswordHash()));
 
-        login("driver@example.com", "BrandNewPassword1");
+        login("driver@example.com", "BrandNewPassword1!");
     }
 
     @Test
@@ -708,7 +745,7 @@ class AuthIntegrationTest {
                         .content("""
                                 {
                                   "token": "%s",
-                                  "newPassword": "BrandNewPassword1"
+                                  "newPassword": "BrandNewPassword1!"
                                 }
                                 """.formatted(rawToken)))
                 .andExpect(status().isOk());
@@ -716,14 +753,14 @@ class AuthIntegrationTest {
         UserData refreshed = userDataRepository.findByEmail("driver@example.com").orElseThrow();
         assertEquals(com.fleet.auth.entity.UserStatus.DISABLED, refreshed.getCredential().getStatus());
         assertTrue(Boolean.FALSE.equals(refreshed.getCredential().getEnabled()));
-        assertTrue(passwordEncoder.matches("BrandNewPassword1", refreshed.getCredential().getPasswordHash()));
+        assertTrue(passwordEncoder.matches("BrandNewPassword1!", refreshed.getCredential().getPasswordHash()));
 
         mockMvc.perform(post("/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
                                   "username": "driver@example.com",
-                                  "password": "BrandNewPassword1"
+                                  "password": "BrandNewPassword1!"
                                 }
                                 """))
                 .andExpect(status().isForbidden())

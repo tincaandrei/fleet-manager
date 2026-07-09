@@ -13,6 +13,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -26,6 +27,8 @@ public class UserNotificationService {
     private static final String PARSING_FAILED_TITLE = "Document parsing failed";
     private static final String PARSING_FAILED_MESSAGE = "We could not automatically process your document. Please review or reupload it.";
     private static final String PENDING_REVIEW_TITLE = "Document pending review";
+    private static final String REPORT_GENERATED_TITLE = "Report generated";
+    private static final String DOCUMENT_EXPIRING_TITLE = "Document expiring soon";
 
     private final UserNotificationRepository notificationRepository;
 
@@ -66,6 +69,46 @@ public class UserNotificationService {
                 PENDING_REVIEW_TITLE,
                 "For vehicle " + label + " there is a document pending review."
         );
+    }
+
+    @Transactional
+    public void notifyReportGenerated(Long userId, String reportName, String scopeLabel) {
+        String scope = scopeLabel == null || scopeLabel.isBlank() ? "your organization" : scopeLabel.trim();
+        createDocumentNotification(
+                userId,
+                null,
+                NotificationType.REPORT_GENERATED,
+                REPORT_GENERATED_TITLE,
+                reportName + " has been generated for " + scope + "."
+        );
+    }
+
+    @Transactional
+    public void notifyDocumentExpiring(
+            Long userId,
+            UUID documentId,
+            String vehicleLabel,
+            String documentLabel,
+            LocalDate validUntil,
+            long daysLeft
+    ) {
+        String vehicle = vehicleLabel == null || vehicleLabel.isBlank() ? "a vehicle" : vehicleLabel.trim();
+        String document = documentLabel == null || documentLabel.isBlank() ? "A document" : documentLabel.trim();
+        String deadline = daysLeft <= 0
+                ? "expires today"
+                : "expires on " + validUntil + " (" + daysLeft + (daysLeft == 1 ? " day" : " days") + " left)";
+        createDocumentNotification(
+                userId,
+                documentId,
+                NotificationType.DOCUMENT_EXPIRING,
+                DOCUMENT_EXPIRING_TITLE,
+                document + " for vehicle " + vehicle + " " + deadline + "."
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasNotification(Long userId, UUID documentId, NotificationType type) {
+        return notificationRepository.existsByUserIdAndDocumentIdAndType(userId, documentId, type);
     }
 
     @Transactional(readOnly = true)

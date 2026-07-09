@@ -171,7 +171,9 @@ public class UserInvitationService {
         String trimmed = password.trim();
         boolean hasLetter = trimmed.chars().anyMatch(Character::isLetter);
         boolean hasDigit = trimmed.chars().anyMatch(Character::isDigit);
-        if (trimmed.length() < 8 || !hasLetter || !hasDigit) {
+        boolean hasSpecialCharacter = trimmed.chars()
+                .anyMatch(character -> !Character.isLetterOrDigit(character) && !Character.isWhitespace(character));
+        if (trimmed.length() < 8 || !hasLetter || !hasDigit || !hasSpecialCharacter) {
             throw new ApiStatusException(HttpStatus.BAD_REQUEST, "PASSWORD_TOO_WEAK");
         }
     }

@@ -14,6 +14,7 @@ import com.fleet.document.dto.VehicleAlertGroupResponse;
 import com.fleet.document.dto.VehicleDocumentAttributeResponse;
 import com.fleet.document.entity.VehicleDocument;
 import com.fleet.document.service.DocumentService;
+import com.fleet.document.service.ReportNotificationService;
 import com.fleet.document.service.VehicleCostReportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -69,6 +70,7 @@ public class DocumentController {
 
     private final DocumentService documentService;
     private final VehicleCostReportService vehicleCostReportService;
+    private final ReportNotificationService reportNotificationService;
 
     @PostMapping(path = {"", "/"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload document", description = "Uploads a PDF or image for a vehicle, stores it, and marks it as PARSING.")
@@ -164,6 +166,12 @@ public class DocumentController {
                 servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
                 authentication
         );
+        reportNotificationService.notifyReportGenerated(
+                "Document history report (PDF)",
+                businessId,
+                servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
+                authentication
+        );
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_PDF)
                 .contentLength(pdf.length)
@@ -192,6 +200,12 @@ public class DocumentController {
             Authentication authentication
     ) {
         byte[] workbook = vehicleCostReportService.export(
+                businessId,
+                servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
+                authentication
+        );
+        reportNotificationService.notifyReportGenerated(
+                "Vehicle cost report (Excel)",
                 businessId,
                 servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
                 authentication
