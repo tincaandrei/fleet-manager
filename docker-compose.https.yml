@@ -16,37 +16,27 @@ services:
 
   auth-service:
     labels:
-      traefik.http.routers.auth-https.entrypoints: websecure
-      traefik.http.routers.auth-https.rule: (Host(`${APP_HOST}`) || Host(`www.${APP_HOST}`)) && PathPrefix(`/api/auth`)
-      traefik.http.routers.auth-https.priority: "100"
-      traefik.http.routers.auth-https.middlewares: auth-strip
-      traefik.http.routers.auth-https.tls: "true"
-      traefik.http.routers.auth-https.tls.certresolver: letsencrypt
-      traefik.http.routers.auth-https.service: auth
+      traefik.http.routers.auth-legacy-https.entrypoints: websecure
+      traefik.http.routers.auth-legacy-https.rule: (Host(`${APP_HOST}`) || Host(`www.${APP_HOST}`)) && (PathPrefix(`/me`) || PathPrefix(`/users`) || PathPrefix(`/businesses`) || PathPrefix(`/invitations`) || (Path(`/login`) && Method(`POST`)) || (Path(`/register`) && Method(`POST`)))
+      traefik.http.routers.auth-legacy-https.priority: "300"
+      traefik.http.routers.auth-legacy-https.tls: "true"
+      traefik.http.routers.auth-legacy-https.tls.certresolver: letsencrypt
+      traefik.http.routers.auth-legacy-https.service: auth
 
   fleet-service:
     labels:
-      traefik.http.routers.fleet-https.entrypoints: websecure
-      traefik.http.routers.fleet-https.rule: (Host(`${APP_HOST}`) || Host(`www.${APP_HOST}`)) && PathPrefix(`/api/fleet`)
-      traefik.http.routers.fleet-https.priority: "100"
-      traefik.http.routers.fleet-https.middlewares: fleet-strip
-      traefik.http.routers.fleet-https.tls: "true"
-      traefik.http.routers.fleet-https.tls.certresolver: letsencrypt
-      traefik.http.routers.fleet-https.service: fleet
+      traefik.http.routers.fleet-legacy-https.entrypoints: websecure
+      traefik.http.routers.fleet-legacy-https.rule: (Host(`${APP_HOST}`) || Host(`www.${APP_HOST}`)) && PathPrefix(`/vehicles`)
+      traefik.http.routers.fleet-legacy-https.priority: "300"
+      traefik.http.routers.fleet-legacy-https.tls: "true"
+      traefik.http.routers.fleet-legacy-https.tls.certresolver: letsencrypt
+      traefik.http.routers.fleet-legacy-https.service: fleet
 
   document-service:
     labels:
-      traefik.http.routers.documents-https.entrypoints: websecure
-      traefik.http.routers.documents-https.rule: (Host(`${APP_HOST}`) || Host(`www.${APP_HOST}`)) && PathPrefix(`/api/documents`)
-      traefik.http.routers.documents-https.priority: "100"
-      traefik.http.routers.documents-https.middlewares: documents-strip
-      traefik.http.routers.documents-https.tls: "true"
-      traefik.http.routers.documents-https.tls.certresolver: letsencrypt
-      traefik.http.routers.documents-https.service: documents
-      traefik.http.routers.notifications-https.entrypoints: websecure
-      traefik.http.routers.notifications-https.rule: (Host(`${APP_HOST}`) || Host(`www.${APP_HOST}`)) && PathPrefix(`/api/notifications`)
-      traefik.http.routers.notifications-https.priority: "100"
-      traefik.http.routers.notifications-https.middlewares: notifications-strip
-      traefik.http.routers.notifications-https.tls: "true"
-      traefik.http.routers.notifications-https.tls.certresolver: letsencrypt
-      traefik.http.routers.notifications-https.service: documents
+       traefik.http.routers.documents-legacy-https.entrypoints: websecure
+      traefik.http.routers.documents-legacy-https.rule: (Host(`${APP_HOST}`) || Host(`www.${APP_HOST}`)) && (PathPrefix(`/history`) || PathPrefix(`/alerts`) || PathPrefix(`/reports`) || PathPrefix(`/unread-count`) || PathPrefix(`/notifications`))
+      traefik.http.routers.documents-legacy-https.priority: "300"
+      traefik.http.routers.documents-legacy-https.tls: "true"
+      traefik.http.routers.documents-legacy-https.tls.certresolver: letsencrypt
+      traefik.http.routers.documents-legacy-https.service: documents
