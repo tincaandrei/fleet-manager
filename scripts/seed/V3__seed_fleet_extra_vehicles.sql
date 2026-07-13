@@ -34,7 +34,8 @@ WITH vehicle_seed AS (
     (ARRAY['Distributie', 'Logistica', 'Cursa lunga', 'Livrari',
            'Operatiuni', 'Administrativ'])[((id - 9201) % 6) + 1] AS department,
     CASE
-      WHEN (id - 9201) % 5 = 4 THEN NULL
+      -- Exact 8 vehicule neatribuite: cate 4 in fiecare organizatie.
+      WHEN id IN (9204, 9208, 9212, 9215, 9219, 9223, 9227, 9230) THEN NULL
       WHEN id <= 9215 THEN 9201 + ((id - 9201) % 3)
       ELSE 9204 + ((id - 9216) % 2)
     END::bigint AS assigned_user_id,
