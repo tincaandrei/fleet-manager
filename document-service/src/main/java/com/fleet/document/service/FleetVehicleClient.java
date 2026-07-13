@@ -53,12 +53,22 @@ public class FleetVehicleClient {
     }
 
     public List<VehicleBasicInfoResponse> visibleVehicles(String authorizationHeader) {
+        return visibleVehicles(authorizationHeader, null);
+    }
+
+    public List<VehicleBasicInfoResponse> visibleVehicles(String authorizationHeader, Long businessId) {
         try {
             VehicleBasicInfoResponse[] response = restClientBuilder
                     .baseUrl(fleetServiceUrl)
                     .build()
                     .get()
-                    .uri("/vehicles")
+                    .uri(uriBuilder -> {
+                        uriBuilder.path("/vehicles");
+                        if (businessId != null) {
+                            uriBuilder.queryParam("businessId", businessId);
+                        }
+                        return uriBuilder.build();
+                    })
                     .header(HttpHeaders.AUTHORIZATION, authorizationHeader)
                     .retrieve()
                     .body(VehicleBasicInfoResponse[].class);

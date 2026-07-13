@@ -86,6 +86,49 @@ class UserNotificationServiceTest {
     }
 
     @Test
+    void createsReportGeneratedNotificationForAdmin() {
+        when(notificationRepository.save(any(UserNotification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        notificationService.notifyReportGenerated(30L, "Vehicle cost report (Excel)", "your organization");
+
+        verify(notificationRepository).save(org.mockito.ArgumentMatchers.argThat(notification ->
+                notification.getUserId().equals(30L)
+                        && notification.getDocumentId() == null
+                        && notification.getType() == NotificationType.REPORT_GENERATED
+                        && notification.getTitle().equals("Report generated")
+                        && notification.getMessage().equals("Vehicle cost report (Excel) has been generated for your organization.")
+        ));
+    }
+
+    @Test
+    void createsDocumentExpiringNotificationForAdmin() {
+        when(notificationRepository.save(any(UserNotification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        UUID documentId = UUID.randomUUID();
+        java.time.LocalDate validUntil = java.time.LocalDate.of(2026, 8, 1);
+
+        notificationService.notifyDocumentExpiring(30L, documentId, "B123ABC", "RCA", validUntil, 23);
+
+        verify(notificationRepository).save(org.mockito.ArgumentMatchers.argThat(notification ->
+                notification.getUserId().equals(30L)
+                        && notification.getDocumentId().equals(documentId)
+                        && notification.getType() == NotificationType.DOCUMENT_EXPIRING
+                        && notification.getMessage().equals("RCA for vehicle B123ABC expires on 2026-08-01 (23 days left).")
+        ));
+    }
+
+    @Test
+    void createsDocumentExpiringTodayNotification() {
+        when(notificationRepository.save(any(UserNotification.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        UUID documentId = UUID.randomUUID();
+
+        notificationService.notifyDocumentExpiring(30L, documentId, "B123ABC", "RCA", java.time.LocalDate.now(), 0);
+
+        verify(notificationRepository).save(org.mockito.ArgumentMatchers.argThat(notification ->
+                notification.getMessage().equals("RCA for vehicle B123ABC expires today.")
+        ));
+    }
+
+    @Test
     void listsOnlyCurrentUserNotifications() {
         UserNotification notification = notification(UUID.randomUUID(), 10L, false);
         when(notificationRepository.findByUserIdOrderByCreatedAtDesc(10L)).thenReturn(List.of(notification));

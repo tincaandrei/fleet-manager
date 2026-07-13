@@ -192,7 +192,7 @@ class AuthIntegrationTest {
                         .content("""
                                 {
                                   "token": "%s",
-                                  "newPassword": "StrongPassword123"
+                                  "newPassword": "StrongPassword123!"
                                 }
                                 """.formatted(rawToken)))
                 .andExpect(status().isOk())
@@ -202,7 +202,7 @@ class AuthIntegrationTest {
         assertEquals(com.fleet.auth.entity.UserStatus.ACTIVE, userData.getCredential().getStatus());
         assertTrue(Boolean.TRUE.equals(userData.getCredential().getEnabled()));
         assertTrue(Boolean.FALSE.equals(userData.getCredential().getPasswordChangeRequired()));
-        assertTrue(passwordEncoder.matches("StrongPassword123", userData.getCredential().getPasswordHash()));
+        assertTrue(passwordEncoder.matches("StrongPassword123!", userData.getCredential().getPasswordHash()));
         assertNotNull(invitationTokenRepository.findAll().get(0).getUsedAt());
 
         mockMvc.perform(post("/accept-invite")
@@ -210,7 +210,7 @@ class AuthIntegrationTest {
                         .content("""
                                 {
                                   "token": "%s",
-                                  "newPassword": "AnotherPassword123"
+                                  "newPassword": "AnotherPassword123!"
                                 }
                                 """.formatted(rawToken)))
                 .andExpect(status().isBadRequest())
@@ -221,13 +221,50 @@ class AuthIntegrationTest {
                         .content("""
                                 {
                                   "token": "not-a-real-token",
-                                  "newPassword": "AnotherPassword123"
+                                  "newPassword": "AnotherPassword123!"
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("INVITATION_TOKEN_INVALID"));
 
-        login("invitee@example.com", "StrongPassword123");
+        login("invitee@example.com", "StrongPassword123!");
+    }
+
+    @Test
+    void inviteAcceptanceRejectsPasswordWithoutSpecialCharacter() throws Exception {
+        String adminToken = login("admin", "admin123");
+
+        mockMvc.perform(post("/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "invitee@example.com",
+                                  "firstName": "Andrei",
+                                  "lastName": "Popescu",
+                                  "roles": ["USER"]
+                                }
+                                """))
+                .andExpect(status().isCreated());
+
+        org.mockito.ArgumentCaptor<String> linkCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(mailService).sendUserInvitationEmail(eq("invitee@example.com"), linkCaptor.capture(), eq(24L));
+        String rawToken = linkCaptor.getValue().substring(linkCaptor.getValue().indexOf("token=") + 6);
+
+        mockMvc.perform(post("/accept-invite")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token": "%s",
+                                  "newPassword": "StrongPassword123"
+                                }
+                                """.formatted(rawToken)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("PASSWORD_TOO_WEAK"));
+
+        UserData userData = userDataRepository.findByEmail("invitee@example.com").orElseThrow();
+        assertEquals(com.fleet.auth.entity.UserStatus.INVITED, userData.getCredential().getStatus());
+        assertNull(invitationTokenRepository.findAll().get(0).getUsedAt());
     }
 
     @Test
@@ -581,6 +618,153 @@ class AuthIntegrationTest {
         assertEquals(Role.SUPERADMIN, adminCredential.getRole().getRoleName());
         assertEquals(adminCredential.getCredentialId(), adminProfile.getCredential().getCredentialId());
         assertNull(adminProfile.getBusiness());
+    }
+
+    @Test
+    void superadminCanSendResetLinkAcrossOrganizationsAndUserCanSetNewPassword() throws Exception {
+        Business business = createBusiness("Acme Transport", true);
+        UserData employee = createUser("driver", "driver@example.com", "password123", Role.EMPLOYEE, business, null, null);
+        String adminToken = login("admin", "admin123");
+
+        mockMvc.perform(post("/admin/users/{id}/password-reset-link", employee.getUserId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("driver@example.com"))
+                .andExpect(jsonPath("$.status").value("ACTIVE"));
+
+        org.mockito.ArgumentCaptor<String> firstLinkCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(mailService).sendPasswordResetEmail(eq("driver@example.com"), firstLinkCaptor.capture(), eq(24L));
+        String firstToken = firstLinkCaptor.getValue().substring(firstLinkCaptor.getValue().indexOf("token=") + 6);
+
+        // A second reset link invalidates the first unused token.
+        mockMvc.perform(post("/admin/users/{id}/password-reset-link", employee.getUserId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken))
+                .andExpect(status().isOk());
+
+        org.mockito.ArgumentCaptor<String> secondLinkCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(mailService, times(2)).sendPasswordResetEmail(eq("driver@example.com"), secondLinkCaptor.capture(), eq(24L));
+        String secondToken = secondLinkCaptor.getValue().substring(secondLinkCaptor.getValue().indexOf("token=") + 6);
+
+        mockMvc.perform(get("/invitations/validate")
+                        .param("token", firstToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.valid").value(false))
+                .andExpect(jsonPath("$.message").value("INVITATION_TOKEN_USED"));
+
+        mockMvc.perform(post("/accept-invite")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token": "%s",
+                                  "newPassword": "BrandNewPassword1!"
+                                }
+                                """.formatted(secondToken)))
+                .andExpect(status().isOk());
+
+        UserData refreshed = userDataRepository.findByEmail("driver@example.com").orElseThrow();
+        assertEquals(com.fleet.auth.entity.UserStatus.ACTIVE, refreshed.getCredential().getStatus());
+        assertTrue(passwordEncoder.matches("BrandNewPassword1!", refreshed.getCredential().getPasswordHash()));
+
+        login("driver@example.com", "BrandNewPassword1!");
+    }
+
+    @Test
+    void businessAdminCanResetOwnOrgUsersButNotOtherOrganizations() throws Exception {
+        Business ownBusiness = createBusiness("Acme Transport", true);
+        Business otherBusiness = createBusiness("Globex Logistics", true);
+        createUser("manager", "manager@example.com", "password123", Role.BUSINESS_ADMIN, ownBusiness, null, null);
+        UserData ownEmployee = createUser("driver", "driver@example.com", "password123", Role.EMPLOYEE, ownBusiness, null, null);
+        UserData otherEmployee = createUser("outsider", "outsider@example.com", "password123", Role.EMPLOYEE, otherBusiness, null, null);
+        String managerToken = login("manager", "password123");
+
+        mockMvc.perform(post("/admin/users/{id}/password-reset-link", ownEmployee.getUserId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + managerToken))
+                .andExpect(status().isOk());
+        verify(mailService).sendPasswordResetEmail(eq("driver@example.com"), startsWith("http://localhost:5173/accept-invite?token="), eq(24L));
+
+        mockMvc.perform(post("/admin/users/{id}/password-reset-link", otherEmployee.getUserId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + managerToken))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Access denied"));
+    }
+
+    @Test
+    void resetLinkIsRejectedForSuperadminTargetsAndInvitedUsers() throws Exception {
+        String adminToken = login("admin", "admin123");
+        UserData otherSuperadmin = createUser("root2", "root2@example.com", "password123", Role.SUPERADMIN, null, null, null);
+
+        mockMvc.perform(post("/admin/users/{id}/password-reset-link", otherSuperadmin.getUserId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Access denied"));
+
+        String response = mockMvc.perform(post("/admin/users")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "email": "invitee@example.com",
+                                  "firstName": "Andrei",
+                                  "lastName": "Popescu",
+                                  "roles": ["USER"]
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        Long invitedUserId = objectMapper.readTree(response).get("id").asLong();
+
+        mockMvc.perform(post("/admin/users/{id}/password-reset-link", invitedUserId)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("INVITATION_NOT_ACCEPTED"));
+    }
+
+    @Test
+    void disabledUserStaysDisabledAfterSettingPasswordThroughResetLink() throws Exception {
+        Business business = createBusiness("Acme Transport", true);
+        UserData employee = createUser("driver", "driver@example.com", "password123", Role.EMPLOYEE, business, null, null);
+        Credential credential = employee.getCredential();
+        credential.setStatus(com.fleet.auth.entity.UserStatus.DISABLED);
+        credential.setEnabled(false);
+        credentialRepository.save(credential);
+
+        String adminToken = login("admin", "admin123");
+        mockMvc.perform(post("/admin/users/{id}/password-reset-link", employee.getUserId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DISABLED"));
+
+        org.mockito.ArgumentCaptor<String> linkCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(mailService).sendPasswordResetEmail(eq("driver@example.com"), linkCaptor.capture(), eq(24L));
+        String rawToken = linkCaptor.getValue().substring(linkCaptor.getValue().indexOf("token=") + 6);
+
+        mockMvc.perform(post("/accept-invite")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "token": "%s",
+                                  "newPassword": "BrandNewPassword1!"
+                                }
+                                """.formatted(rawToken)))
+                .andExpect(status().isOk());
+
+        UserData refreshed = userDataRepository.findByEmail("driver@example.com").orElseThrow();
+        assertEquals(com.fleet.auth.entity.UserStatus.DISABLED, refreshed.getCredential().getStatus());
+        assertTrue(Boolean.FALSE.equals(refreshed.getCredential().getEnabled()));
+        assertTrue(passwordEncoder.matches("BrandNewPassword1!", refreshed.getCredential().getPasswordHash()));
+
+        mockMvc.perform(post("/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "username": "driver@example.com",
+                                  "password": "BrandNewPassword1!"
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("ACCOUNT_DISABLED"));
     }
 
     private Long register(String username, String email) throws Exception {

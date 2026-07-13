@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import ProtectedRoute from './auth/ProtectedRoute';
+import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import AcceptInvitePage from './pages/AcceptInvitePage';
@@ -14,6 +15,7 @@ import DocumentHistoryPage from './pages/DocumentHistoryPage';
 import BusinessesPage from './pages/BusinessesPage';
 import BusinessCreateEditPage from './pages/BusinessCreateEditPage';
 import BusinessUsersPage from './pages/BusinessUsersPage';
+import SuperAdminConsolePage from './pages/SuperAdminConsolePage';
 import PendingOrganizationPage from './pages/PendingOrganizationPage';
 import ToastProvider from './components/ToastProvider';
 import { useAuth } from './auth/useAuth';
@@ -21,7 +23,15 @@ import { homeForRole } from './auth/roleHome';
 
 function RoleHomeRedirect() {
   const { token, role, businessId } = useAuth();
-  return <Navigate to={token ? homeForRole(role, businessId) : '/login'} replace />;
+  return <Navigate to={token ? homeForRole(role, businessId) : '/'} replace />;
+}
+
+function HomeRoute() {
+  const { token, role, businessId } = useAuth();
+  if (token) {
+    return <Navigate to={homeForRole(role, businessId)} replace />;
+  }
+  return <LandingPage />;
 }
 
 export default function App() {
@@ -34,7 +44,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/accept-invite" element={<AcceptInvitePage />} />
-            <Route path="/" element={<RoleHomeRedirect />} />
+            <Route path="/" element={<HomeRoute />} />
 
             {/* All authenticated users */}
             <Route path="/pending-organization" element={<ProtectedRoute><PendingOrganizationPage /></ProtectedRoute>} />
@@ -70,6 +80,14 @@ export default function App() {
             />
 
             {/* SUPERADMIN only */}
+            <Route
+              path="/superadmin"
+              element={
+                <ProtectedRoute requiredRoles={['SUPERADMIN']}>
+                  <SuperAdminConsolePage />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/businesses"
               element={

@@ -14,6 +14,7 @@ import com.fleet.document.dto.VehicleAlertGroupResponse;
 import com.fleet.document.dto.VehicleDocumentAttributeResponse;
 import com.fleet.document.entity.VehicleDocument;
 import com.fleet.document.service.DocumentService;
+import com.fleet.document.service.ReportNotificationService;
 import com.fleet.document.service.VehicleCostReportService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -69,6 +70,7 @@ public class DocumentController {
 
     private final DocumentService documentService;
     private final VehicleCostReportService vehicleCostReportService;
+    private final ReportNotificationService reportNotificationService;
 
     @PostMapping(path = {"", "/"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @Operation(summary = "Upload document", description = "Uploads a PDF or image for a vehicle, stores it, and marks it as PARSING.")
@@ -137,12 +139,15 @@ public class DocumentController {
             @RequestParam(name = "page", required = false, defaultValue = "0") Integer page,
             @Parameter(description = "Page size, capped at 100.", example = "20")
             @RequestParam(name = "size", required = false, defaultValue = "20") Integer size,
+            @Parameter(description = "Filter by business id. SUPERADMIN only; ignored for other roles.", example = "1")
+            @RequestParam(name = "businessId", required = false) Long businessId,
             HttpServletRequest servletRequest,
             Authentication authentication
     ) {
         return ResponseEntity.ok(documentService.history(
                 page,
                 size,
+                businessId,
                 servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
                 authentication
         ));
@@ -151,10 +156,19 @@ public class DocumentController {
     @GetMapping("/history/export")
     @Operation(summary = "Export document upload history", description = "Exports visible upload history as a PDF.")
     public ResponseEntity<Resource> exportHistory(
+            @Parameter(description = "Filter by business id. SUPERADMIN only; ignored for other roles.", example = "1")
+            @RequestParam(name = "businessId", required = false) Long businessId,
             HttpServletRequest servletRequest,
             Authentication authentication
     ) {
         byte[] pdf = documentService.exportHistoryPdf(
+                businessId,
+                servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
+                authentication
+        );
+        reportNotificationService.notifyReportGenerated(
+                "Document history report (PDF)",
+                businessId,
                 servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
                 authentication
         );
@@ -180,10 +194,19 @@ public class DocumentController {
             @ApiResponse(responseCode = "502", description = "Fleet Service could not provide visible vehicles")
     })
     public ResponseEntity<Resource> exportVehicleCosts(
+            @Parameter(description = "Filter by business id. SUPERADMIN only; ignored for other roles.", example = "1")
+            @RequestParam(name = "businessId", required = false) Long businessId,
             HttpServletRequest servletRequest,
             Authentication authentication
     ) {
         byte[] workbook = vehicleCostReportService.export(
+                businessId,
+                servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
+                authentication
+        );
+        reportNotificationService.notifyReportGenerated(
+                "Vehicle cost report (Excel)",
+                businessId,
                 servletRequest.getHeader(HttpHeaders.AUTHORIZATION),
                 authentication
         );

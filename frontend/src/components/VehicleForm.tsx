@@ -7,6 +7,12 @@ const TYPES = ['CAR', 'VAN', 'TRUCK', 'MOTORCYCLE', 'OTHER'];
 const FUELS = ['DIESEL', 'PETROL', 'HYBRID', 'ELECTRIC', 'LPG', 'OTHER'];
 const OWNERSHIPS = ['OWNED', 'LEASED', 'RENTED', 'OTHER'];
 
+interface OrganizationOption {
+  id: number;
+  name: string;
+  active: boolean;
+}
+
 interface Props {
   initial?: Partial<VehicleRequest>;
   onSubmit: (data: VehicleRequest) => void;
@@ -16,6 +22,8 @@ interface Props {
   imageFile?: File | null;
   currentVehicle?: Vehicle | null;
   onImageFileChange?: (file: File | null) => void;
+  /** When provided (SUPERADMIN create flow), shows an organization selector and sends businessId. */
+  organizations?: OrganizationOption[];
 }
 
 export default function VehicleForm({
@@ -27,8 +35,10 @@ export default function VehicleForm({
   imageFile,
   currentVehicle,
   onImageFileChange,
+  organizations,
 }: Props) {
   const [form, setForm] = useState<VehicleRequest>({
+    businessId: initial?.businessId,
     licensePlate: initial?.licensePlate ?? '',
     vin: initial?.vin ?? '',
     brand: initial?.brand ?? '',
@@ -64,6 +74,29 @@ export default function VehicleForm({
   return (
     <form onSubmit={handleSubmit} className="vehicle-form">
       {error && <p className="error full-width">{error}</p>}
+
+      {organizations && (
+        <label className="full-width">
+          Organization
+          <select
+            value={form.businessId ?? ''}
+            onChange={(e) =>
+              setForm((prev) => ({
+                ...prev,
+                businessId: e.target.value === '' ? undefined : Number(e.target.value),
+              }))
+            }
+            required
+          >
+            <option value="" disabled>Select an organization...</option>
+            {organizations.map((org) => (
+              <option key={org.id} value={org.id} disabled={!org.active}>
+                {org.name}{org.active ? '' : ' (inactive)'}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <label>
         License Plate

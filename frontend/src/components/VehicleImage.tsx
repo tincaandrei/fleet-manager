@@ -14,29 +14,35 @@ export default function VehicleImage({ vehicle, className = '' }: VehicleImagePr
   useEffect(() => {
     let objectUrl: string | null = null;
     let active = true;
-    setSrc(null);
-    setFailed(false);
+    const imageUrl = vehicle.imageUrl;
+    const cacheKey = vehicle.updatedAt;
 
-    if (!vehicle.imageUrl) {
-      return () => undefined;
-    }
+    const timeoutId = window.setTimeout(() => {
+      setSrc(null);
+      setFailed(false);
 
-    getVehicleImage(vehicle.imageUrl, vehicle.updatedAt)
-      .then((res) => {
-        if (!active) {
-          return;
-        }
-        objectUrl = URL.createObjectURL(res.data);
-        setSrc(objectUrl);
-      })
-      .catch(() => {
-        if (active) {
-          setFailed(true);
-        }
-      });
+      if (!imageUrl) {
+        return;
+      }
+
+      getVehicleImage(imageUrl, cacheKey)
+        .then((res) => {
+          if (!active) {
+            return;
+          }
+          objectUrl = URL.createObjectURL(res.data);
+          setSrc(objectUrl);
+        })
+        .catch(() => {
+          if (active) {
+            setFailed(true);
+          }
+        });
+    }, 0);
 
     return () => {
       active = false;
+      window.clearTimeout(timeoutId);
       if (objectUrl) {
         URL.revokeObjectURL(objectUrl);
       }

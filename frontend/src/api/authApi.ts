@@ -85,6 +85,9 @@ export const inviteUser = (data: InviteUserRequest) =>
 export const resendUserInvite = (userId: number) =>
   api.post<AdminUserResponse>(`/api/auth/admin/users/${userId}/resend-invite`);
 
+export const sendPasswordResetLink = (userId: number) =>
+  api.post<AdminUserResponse>(`/api/auth/admin/users/${userId}/password-reset-link`);
+
 export const updateAdminUserStatus = (userId: number, status: UserStatus) =>
   api.patch<AdminUserResponse>(`/api/auth/admin/users/${userId}/status`, { status });
 

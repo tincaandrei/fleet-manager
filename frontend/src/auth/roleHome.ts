@@ -12,7 +12,7 @@ export function normalizeRole(value: unknown): Role | null {
 
 export function homeForRole(role: Role | null, businessId?: number | null): string {
   if (role === 'SUPERADMIN') {
-    return '/businesses';
+    return '/superadmin';
   }
   return businessId == null ? '/pending-organization' : '/vehicles';
 }

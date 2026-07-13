@@ -14,16 +14,24 @@ import type {
 export const listDocumentsByVehicle = (vehicleId: number) =>
   api.get<DocumentResponse[]>('/api/documents', { params: { vehicleId } });
 
-export const listDocumentHistory = (page: number, size: number) =>
+export const listDocumentHistory = (page: number, size: number, businessId?: number) =>
   api.get<PagedResponse<DocumentHistoryItem>>('/api/documents/history', {
-    params: { page, size },
+    params: { page, size, businessId },
   });
 
-export const exportDocumentHistoryPdf = () =>
-  api.get<Blob>('/api/documents/history/export', { responseType: 'blob' });
+/** SUPERADMIN may pass businessId to scope the export to one organization. */
+export const exportDocumentHistoryPdf = (businessId?: number) =>
+  api.get<Blob>('/api/documents/history/export', {
+    responseType: 'blob',
+    params: { businessId },
+  });
 
-export const exportVehicleCostsExcel = () =>
-  api.get<Blob>('/api/documents/reports/vehicle-costs/export', { responseType: 'blob' });
+/** SUPERADMIN may pass businessId to scope the export to one organization. */
+export const exportVehicleCostsExcel = (businessId?: number) =>
+  api.get<Blob>('/api/documents/reports/vehicle-costs/export', {
+    responseType: 'blob',
+    params: { businessId },
+  });
 
 /**
  * Upload a document for a vehicle.

@@ -150,19 +150,15 @@ export default function VehiclesPage() {
   const serviceCount = vehicles.filter((vehicle) => vehicle.status === 'IN_SERVICE').length;
   const inactiveCount = vehicles.filter((vehicle) => vehicle.status === 'INACTIVE').length;
   const pageCount = Math.max(1, Math.ceil(vehicles.length / PAGE_SIZE));
-  const pageStart = (page - 1) * PAGE_SIZE;
+  // Clamp at render time so a shrinking result set never leaves us on a missing page.
+  const currentPage = Math.min(page, pageCount);
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
   const selectedFilterCount = filterCount(filterDraft);
   const appliedFilterCount = filterCount(appliedFilters);
   const paginatedVehicles = useMemo(
     () => vehicles.slice(pageStart, pageStart + PAGE_SIZE),
     [vehicles, pageStart],
   );
-
-  useEffect(() => {
-    if (page > pageCount) {
-      setPage(pageCount);
-    }
-  }, [page, pageCount]);
 
   return (
     <PageShell>
@@ -396,16 +392,16 @@ export default function VehiclesPage() {
                 <nav className="vehicle-pagination" aria-label="Vehicle pages">
                   <Button
                     variant="secondary"
-                    disabled={page === 1}
-                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                    disabled={currentPage === 1}
+                    onClick={() => setPage(Math.max(1, currentPage - 1))}
                   >
                     Previous
                   </Button>
-                  <span>Page {page} of {pageCount}</span>
+                  <span>Page {currentPage} of {pageCount}</span>
                   <Button
                     variant="secondary"
-                    disabled={page === pageCount}
-                    onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+                    disabled={currentPage === pageCount}
+                    onClick={() => setPage(Math.min(pageCount, currentPage + 1))}
                   >
                     Next
                   </Button>

@@ -57,13 +57,20 @@ public class VehicleCostReportService {
 
     @Transactional(readOnly = true)
     public byte[] export(String authorizationHeader, Authentication authentication) {
+        return export(null, authorizationHeader, authentication);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] export(Long businessIdFilter, String authorizationHeader, Authentication authentication) {
         if (!SecurityUtils.canReview(authentication)) {
             throw new AccessDeniedException("Access denied");
         }
 
         boolean includeBusiness = SecurityUtils.isSuperadmin(authentication);
+        // Optional business filter is honoured only for SUPERADMIN; other roles keep own-business scope.
+        Long effectiveBusinessId = includeBusiness ? businessIdFilter : null;
         LocalDate reportDate = LocalDate.now();
-        List<VehicleBasicInfoResponse> vehicles = fleetVehicleClient.visibleVehicles(authorizationHeader).stream()
+        List<VehicleBasicInfoResponse> vehicles = fleetVehicleClient.visibleVehicles(authorizationHeader, effectiveBusinessId).stream()
                 .sorted(vehicleComparator())
                 .toList();
         List<Long> vehicleIds = vehicles.stream().map(VehicleBasicInfoResponse::id).toList();

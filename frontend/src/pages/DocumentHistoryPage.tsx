@@ -11,8 +11,9 @@ import type { DocumentHistoryItem, DocumentStatus } from '../types/document';
 import DataState from '../components/ui/DataState';
 import PageHeader from '../components/ui/PageHeader';
 import PageShell from '../components/ui/PageShell';
+import Pagination from '../components/ui/Pagination';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 
 function apiMessage(err: unknown, fallback: string): string {
   const e = err as { response?: { data?: { message?: string } } };
@@ -160,9 +161,6 @@ export default function DocumentHistoryPage() {
     }
   };
 
-  const canGoBack = page > 0;
-  const canGoNext = page + 1 < totalPages;
-
   return (
     <PageShell className="document-history-page">
       <PageHeader
@@ -188,7 +186,6 @@ export default function DocumentHistoryPage() {
             >
               {exportingPdf ? 'Exporting...' : 'Export PDF'}
             </button>
-            <Link to="/vehicles" className="btn btn-secondary">Vehicles</Link>
           </>
         )}
       />
@@ -255,27 +252,12 @@ export default function DocumentHistoryPage() {
             </table>
           </div>
 
-          <div className="history-pagination">
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={!canGoBack}
-              onClick={() => setPage((current) => Math.max(current - 1, 0))}
-            >
-              Previous
-            </button>
-            <span>
-              Page {totalPages === 0 ? 0 : page + 1} of {totalPages}
-            </span>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              disabled={!canGoNext}
-              onClick={() => setPage((current) => current + 1)}
-            >
-              Next
-            </button>
-          </div>
+          <Pagination
+            page={page + 1}
+            pageCount={totalPages}
+            onPageChange={(nextPage) => setPage(nextPage - 1)}
+            summary={`${totalElements} documents`}
+          />
         </>
       )}
     </PageShell>

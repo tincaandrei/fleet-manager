@@ -144,10 +144,15 @@ services:
       - fleet-net
     labels:
       traefik.enable: "true"
-      traefik.http.routers.auth-http.entrypoints: web
-      traefik.http.routers.auth-http.rule: PathPrefix(`/api/auth`)
+
+      traefik.http.routers.auth-http.entrypoints: websecure
+      traefik.http.routers.auth-http.rule: "Host(`${APP_HOST}`) && PathPrefix(`/api/auth`)"
       traefik.http.routers.auth-http.priority: "100"
       traefik.http.routers.auth-http.middlewares: auth-strip
+      traefik.http.routers.auth-http.tls: "true"
+      traefik.http.routers.auth-http.tls.certresolver: letsencrypt
+      traefik.http.routers.auth-http.service: auth
+
       traefik.http.middlewares.auth-strip.stripprefix.prefixes: /api/auth
       traefik.http.services.auth.loadbalancer.server.port: "8080"
     healthcheck:
@@ -317,6 +322,18 @@ services:
       OPENAI_TEMPERATURE: ${OPENAI_TEMPERATURE:-0}
       DOCUMENT_OCR_LANGUAGE: ${DOCUMENT_OCR_LANGUAGE:-ron+eng}
       DOCUMENT_OCR_DPI: ${DOCUMENT_OCR_DPI:-300}
+      MAIL_ENABLED: "true"
+      MAIL_HOST: ${MAIL_HOST:?Set MAIL_HOST in .env.prod}
+      MAIL_PORT: ${MAIL_PORT:?Set MAIL_PORT in .env.prod}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:?Set MAIL_FROM in .env.prod}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-true}
+      MAIL_SMTP_STARTTLS_ENABLE: ${MAIL_SMTP_STARTTLS_ENABLE:-true}
+      MAIL_DEBUG: "false"
+      EXPIRY_ALERTS_ENABLED: ${EXPIRY_ALERTS_ENABLED:-true}
+      EXPIRY_ALERTS_CRON: ${EXPIRY_ALERTS_CRON:-0 0 7 * * *}
+      EXPIRY_ALERTS_DAYS_AHEAD: ${EXPIRY_ALERTS_DAYS_AHEAD:-30}
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: 5672
       RABBITMQ_USERNAME: ${RABBITMQ_DEFAULT_USER}

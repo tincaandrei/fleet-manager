@@ -52,4 +52,31 @@ public class SmtpMailService implements MailService {
             throw new ApiStatusException(HttpStatus.BAD_GATEWAY, "MAIL_SEND_FAILED");
         }
     }
+
+    @Override
+    public void sendPasswordResetEmail(String to, String setupLink, long expiryHours) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(fromAddress);
+        message.setTo(to);
+        message.setSubject("Reset your DoccuFleet password");
+        message.setText("""
+                Hello,
+
+                An administrator requested a password reset for your DoccuFleet account.
+
+                Set a new password using this link:
+                %s
+
+                This link expires in %d hours and can be used only once.
+
+                If you did not expect this email, you can ignore it. Your current password stays valid.
+                """.formatted(setupLink, expiryHours));
+        try {
+            mailSender.send(message);
+        } catch (MailException exception) {
+            log.error("Failed to send password reset email via SMTP host={} port={} from={} to={}",
+                    mailHost, mailPort, fromAddress, to, exception);
+            throw new ApiStatusException(HttpStatus.BAD_GATEWAY, "MAIL_SEND_FAILED");
+        }
+    }
 }

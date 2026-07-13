@@ -233,6 +233,7 @@ public class DocumentService {
     public PagedResponse<DocumentHistoryResponse> history(
             Integer page,
             Integer size,
+            Long businessIdFilter,
             String authorizationHeader,
             Authentication authentication
     ) {
@@ -242,7 +243,10 @@ public class DocumentService {
         Page<VehicleDocument> documents;
 
         if (SecurityUtils.isSuperadmin(authentication)) {
-            documents = documentRepository.findAllByOrderByCreatedAtDesc(pageRequest);
+            // Optional business filter is honoured only for SUPERADMIN.
+            documents = businessIdFilter == null
+                    ? documentRepository.findAllByOrderByCreatedAtDesc(pageRequest)
+                    : documentRepository.findByBusinessIdOrderByCreatedAtDesc(businessIdFilter, pageRequest);
         } else if (SecurityUtils.isBusinessAdmin(authentication)) {
             Long businessId = SecurityUtils.currentBusinessId(authentication);
             if (businessId == null) {
@@ -281,14 +285,20 @@ public class DocumentService {
     }
 
     @Transactional(readOnly = true)
-    public byte[] exportHistoryPdf(String authorizationHeader, Authentication authentication) {
+    public byte[] exportHistoryPdf(Long businessIdFilter, String authorizationHeader, Authentication authentication) {
         List<VehicleDocument> documents;
         String title;
         boolean includeBusiness = false;
 
         if (SecurityUtils.isSuperadmin(authentication)) {
-            documents = documentRepository.findAllByOrderByCreatedAtDesc();
-            title = "All Document History";
+            // Optional business filter is honoured only for SUPERADMIN.
+            if (businessIdFilter == null) {
+                documents = documentRepository.findAllByOrderByCreatedAtDesc();
+                title = "All Document History";
+            } else {
+                documents = documentRepository.findByBusinessIdOrderByCreatedAtDesc(businessIdFilter);
+                title = "Organization Document History";
+            }
             includeBusiness = true;
         } else if (SecurityUtils.isBusinessAdmin(authentication)) {
             Long businessId = SecurityUtils.currentBusinessId(authentication);

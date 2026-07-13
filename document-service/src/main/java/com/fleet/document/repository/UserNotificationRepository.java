@@ -1,5 +1,6 @@
 package com.fleet.document.repository;
 
+import com.fleet.document.entity.NotificationType;
 import com.fleet.document.entity.UserNotification;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -16,4 +17,6 @@ public interface UserNotificationRepository extends JpaRepository<UserNotificati
     long countByUserIdAndReadFalse(Long userId);
 
     List<UserNotification> findByUserIdAndReadFalse(Long userId);
+
+    boolean existsByUserIdAndDocumentIdAndType(Long userId, UUID documentId, NotificationType type);
 }

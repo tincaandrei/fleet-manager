@@ -305,6 +305,16 @@ public class UserController {
         return ResponseEntity.ok(userInfoService.resendInvite(id, authentication));
     }
 
+    @PostMapping("/admin/users/{id}/password-reset-link")
+    @Operation(summary = "Send password reset link", description = "Emails a one-time password setup link to an active or disabled user. Requires SUPERADMIN or same-business BUSINESS_ADMIN.")
+    @SecurityRequirement(name = "bearerAuth")
+    public ResponseEntity<AdminUserResponse> sendPasswordResetLink(
+            @PathVariable Long id,
+            Authentication authentication
+    ) {
+        return ResponseEntity.ok(userInfoService.sendPasswordResetLink(id, authentication));
+    }
+
     @PatchMapping("/admin/users/{id}/status")
     @Operation(summary = "Update user status", description = "Enables or disables a user account.")
     @SecurityRequirement(name = "bearerAuth")

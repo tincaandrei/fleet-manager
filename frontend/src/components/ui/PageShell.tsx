@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import Navbar from '../Navbar';
+import AppLayout from '../layout/AppLayout';
 
 interface PageShellProps {
   children: ReactNode;
@@ -8,11 +8,10 @@ interface PageShellProps {
 
 export default function PageShell({ children, className = '' }: PageShellProps) {
   return (
-    <>
-      <Navbar />
+    <AppLayout>
       <main className={`page page-shell${className ? ` ${className}` : ''}`}>
         {children}
       </main>
-    </>
+    </AppLayout>
   );
 }
