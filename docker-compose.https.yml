@@ -34,7 +34,7 @@ services:
 
   document-service:
     labels:
-       traefik.http.routers.documents-legacy-https.entrypoints: websecure
+      traefik.http.routers.documents-legacy-https.entrypoints: websecure
       traefik.http.routers.documents-legacy-https.rule: (Host(`${APP_HOST}`) || Host(`www.${APP_HOST}`)) && (PathPrefix(`/history`) || PathPrefix(`/alerts`) || PathPrefix(`/reports`) || PathPrefix(`/unread-count`) || PathPrefix(`/notifications`))
       traefik.http.routers.documents-legacy-https.priority: "300"
       traefik.http.routers.documents-legacy-https.tls: "true"
