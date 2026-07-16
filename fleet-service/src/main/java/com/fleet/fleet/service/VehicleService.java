@@ -1,6 +1,7 @@
 package com.fleet.fleet.service;
 
 import com.fleet.fleet.dto.VehicleAssignmentRequest;
+import com.fleet.fleet.dto.AuthUserLookupResponse;
 import com.fleet.fleet.dto.VehicleBasicInfoResponse;
 import com.fleet.fleet.dto.VehicleExistsResponse;
 import com.fleet.fleet.dto.VehicleRequest;
@@ -34,6 +35,7 @@ public class VehicleService {
 
     private final VehicleRepository vehicleRepository;
     private final VehicleImageStorageService imageStorageService;
+    private final AuthUserLookupClient authUserLookupClient;
 
     @Transactional
     public VehicleResponse create(VehicleRequest request, Authentication authentication) {
@@ -54,8 +56,6 @@ public class VehicleService {
                 .ownershipType(request.ownershipType())
                 .status(request.status() == null ? VehicleStatus.ACTIVE : request.status())
                 .department(normalizeOptional(request.department()))
-                .assignedUserId(request.assignedUserId())
-                .assignedDriverName(normalizeOptional(request.assignedDriverName()))
                 .currentMileage(request.currentMileage())
                 .build();
         return toResponse(vehicleRepository.save(vehicle));
@@ -123,8 +123,6 @@ public class VehicleService {
         vehicle.setOwnershipType(request.ownershipType());
         vehicle.setStatus(request.status() == null ? VehicleStatus.ACTIVE : request.status());
         vehicle.setDepartment(normalizeOptional(request.department()));
-        vehicle.setAssignedUserId(request.assignedUserId());
-        vehicle.setAssignedDriverName(normalizeOptional(request.assignedDriverName()));
         vehicle.setCurrentMileage(request.currentMileage());
         return toResponse(vehicleRepository.save(vehicle));
     }
@@ -138,12 +136,47 @@ public class VehicleService {
     }
 
     @Transactional
-    public VehicleResponse assign(Long id, VehicleAssignmentRequest request, Authentication authentication) {
+    public VehicleResponse assign(
+            Long id,
+            VehicleAssignmentRequest request,
+            Authentication authentication,
+            String authorizationHeader
+    ) {
         Vehicle vehicle = getVehicle(id);
-        assertCanWrite(vehicle, authentication);
-        vehicle.setAssignedUserId(request.assignedUserId());
-        vehicle.setAssignedDriverName(normalizeOptional(request.assignedDriverName()));
-        vehicle.setDepartment(normalizeOptional(request.department()));
+        assertCanAssignDriver(vehicle, authentication);
+
+        if (request.assignedUserId() == null) {
+            vehicle.setAssignedUserId(null);
+            vehicle.setAssignedDriverName(null);
+            return toResponse(vehicleRepository.save(vehicle));
+        }
+
+        AuthUserLookupResponse driver = authUserLookupClient
+                .lookupUser(request.assignedUserId(), authorizationHeader)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Selected driver is not visible in this organization"
+                ));
+        boolean eligible = request.assignedUserId().equals(driver.userId())
+                && vehicle.getBusinessId().equals(driver.businessId())
+                && "EMPLOYEE".equalsIgnoreCase(driver.role())
+                && "ACTIVE".equalsIgnoreCase(driver.status())
+                && !Boolean.FALSE.equals(driver.enabled());
+        if (!eligible) {
+            throw new IllegalArgumentException(
+                    "Selected driver must be an active employee in this organization"
+            );
+        }
+
+        String driverName = normalizeOptional(driver.username());
+        if (!StringUtils.hasText(driverName)) {
+            driverName = normalizeOptional(driver.email());
+        }
+        if (!StringUtils.hasText(driverName)) {
+            throw new IllegalArgumentException("Selected driver has no display name");
+        }
+
+        vehicle.setAssignedUserId(driver.userId());
+        vehicle.setAssignedDriverName(driverName);
         return toResponse(vehicleRepository.save(vehicle));
     }
 
@@ -255,6 +288,16 @@ public class VehicleService {
         if (SecurityUtils.isBusinessAdmin(authentication)
                 && SecurityUtils.currentBusinessId(authentication) != null
                 && SecurityUtils.currentBusinessId(authentication).equals(vehicle.getBusinessId())) {
+            return;
+        }
+        throw new AccessDeniedException("Access denied");
+    }
+
+    private void assertCanAssignDriver(Vehicle vehicle, Authentication authentication) {
+        Long businessId = SecurityUtils.currentBusinessId(authentication);
+        if (SecurityUtils.isBusinessAdmin(authentication)
+                && businessId != null
+                && businessId.equals(vehicle.getBusinessId())) {
             return;
         }
         throw new AccessDeniedException("Access denied");

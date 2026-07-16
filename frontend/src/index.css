@@ -3015,6 +3015,68 @@ p { margin: 0.5rem 0; }
   border-color: var(--teal-mid);
 }
 
+.assignment-modal {
+  width: min(100%, 520px);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.assignment-modal .modal-header > div {
+  min-width: 0;
+}
+
+.assignment-modal-vehicle {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--subtle);
+  font-size: 0.82rem;
+}
+
+.assignment-form {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1.25rem;
+}
+
+.assignment-form label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.assignment-form select {
+  width: 100%;
+  border: 1px solid var(--border-dark);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+}
+
+.assignment-help,
+.assignment-error {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+.assignment-help {
+  color: var(--subtle);
+}
+
+.assignment-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 0.45rem;
+}
+
 .profile-edit-form {
   width: 100%;
   background: var(--surface);
@@ -4064,17 +4126,17 @@ a.cell-primary {
 }
 
 .row-menu-dropdown {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
+  position: fixed;
   min-width: 176px;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   display: grid;
   padding: 0.3rem;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
-  z-index: 120;
+  z-index: 1000;
 }
 
 .row-menu-item {

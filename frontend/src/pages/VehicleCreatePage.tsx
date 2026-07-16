@@ -65,7 +65,7 @@ export default function VehicleCreatePage() {
     <PageShell>
         <PageHeader
           title="New Vehicle"
-          description="Create a vehicle record with assignment and operating details."
+          description="Create a vehicle record with identification and operating details."
         />
         {businessesError && <DataState type="error">{businessesError}</DataState>}
         {waitingForBusinesses && <DataState type="loading">Loading organizations...</DataState>}

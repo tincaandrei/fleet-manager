@@ -610,8 +610,8 @@ paths:
       tags:
       - Vehicles
       summary: Assign vehicle
-      description: "Updates the user, driver name, and department assignment for a\
-        \ vehicle. Requires `ADMIN` or `FLEET_MANAGER`."
+      description: Assigns an active employee from the vehicle organization or clears
+        the current driver. Requires same-organization `BUSINESS_ADMIN`.
       operationId: assign
       parameters:
       - name: id
@@ -623,16 +623,13 @@ paths:
           format: int64
         example: 1
       requestBody:
-        description: Assignment details. Nullable fields can be used to clear existing
-          assignment data.
+        description: Driver selection. A null user id clears the current assignment.
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/VehicleAssignmentRequest"
             example:
               assignedUserId: 12
-              assignedDriverName: Alex Ionescu
-              department: Operations
         required: true
       responses:
         "404":
@@ -919,17 +916,6 @@ components:
           type: string
           description: Department currently responsible for the vehicle.
           example: Operations
-        assignedUserId:
-          type: integer
-          description: Application user id assigned to the vehicle.
-          format: int64
-          example: 12
-        assignedDriverName:
-          maxLength: 160
-          minLength: 0
-          type: string
-          description: Human-readable assigned driver name.
-          example: Alex Ionescu
         currentMileage:
           minimum: 0
           type: integer
@@ -1066,23 +1052,12 @@ components:
       type: object
       properties:
         assignedUserId:
+          minimum: 1
           type: integer
           description: Application user id assigned to the vehicle. Send null to clear
             it.
           format: int64
           example: 12
-        assignedDriverName:
-          maxLength: 160
-          minLength: 0
-          type: string
-          description: Human-readable assigned driver name. Send null to clear it.
-          example: Alex Ionescu
-        department:
-          maxLength: 120
-          minLength: 0
-          type: string
-          description: Department responsible for the vehicle after assignment.
-          example: Operations
       description: Payload used to assign or reassign a vehicle.
     VehicleExistsResponse:
       type: object

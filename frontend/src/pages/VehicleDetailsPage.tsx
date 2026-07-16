@@ -6,6 +6,7 @@ import { useAuth } from '../auth/useAuth';
 import VehicleDocumentsSection from '../components/VehicleDocumentsSection';
 import ComplianceSection from '../components/ComplianceSection';
 import VehicleImage from '../components/VehicleImage';
+import AssignDriverModal from '../components/AssignDriverModal';
 import PageShell from '../components/ui/PageShell';
 import DataState from '../components/ui/DataState';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -17,7 +18,7 @@ type Tab = 'details' | 'documents' | 'compliance';
 
 export default function VehicleDetailsPage() {
   const { id } = useParams<{ id: string }>();
-  const { isAdmin } = useAuth();
+  const { isAdmin, isBusinessAdmin } = useAuth();
   const navigate = useNavigate();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [loading, setLoading] = useState(true);
@@ -27,6 +28,7 @@ export default function VehicleDetailsPage() {
   const [imageSaving, setImageSaving] = useState(false);
   const [isImageOpen, setIsImageOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('details');
+  const [isAssignmentOpen, setIsAssignmentOpen] = useState(false);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -111,6 +113,11 @@ export default function VehicleDetailsPage() {
                 <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
               </>
             )}
+            {isBusinessAdmin && vehicle && (
+              <Button variant="secondary" onClick={() => setIsAssignmentOpen(true)}>
+                {vehicle.assignedUserId == null ? 'Assign driver' : 'Change driver'}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -183,7 +190,6 @@ export default function VehicleDetailsPage() {
                   <tr><th>Status</th><td><StatusBadge status={vehicle.status} /></td></tr>
                   <tr><th>Department</th><td>{vehicle.department}</td></tr>
                   <tr><th>Assigned Driver</th><td>{vehicle.assignedDriverName || '—'}</td></tr>
-                  <tr><th>Assigned User ID</th><td>{vehicle.assignedUserId ?? '—'}</td></tr>
                   <tr><th>Mileage</th><td>{vehicle.currentMileage.toLocaleString()} km</td></tr>
                   {vehicle.businessId != null && (
                     <tr><th>Organization ID</th><td>{vehicle.businessId}</td></tr>
@@ -254,6 +260,13 @@ export default function VehicleDetailsPage() {
                   </div>
                 </section>
               </div>
+            )}
+            {isBusinessAdmin && isAssignmentOpen && (
+              <AssignDriverModal
+                vehicle={vehicle}
+                onClose={() => setIsAssignmentOpen(false)}
+                onAssigned={setVehicle}
+              />
             )}
           </>
         )}

@@ -1,11 +1,13 @@
 package com.fleet.fleet;
 
+import com.fleet.fleet.dto.AuthUserLookupResponse;
 import com.fleet.fleet.entity.FuelType;
 import com.fleet.fleet.entity.OwnershipType;
 import com.fleet.fleet.entity.Vehicle;
 import com.fleet.fleet.entity.VehicleStatus;
 import com.fleet.fleet.entity.VehicleType;
 import com.fleet.fleet.repository.VehicleRepository;
+import com.fleet.fleet.service.AuthUserLookupClient;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
@@ -14,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
@@ -25,11 +28,14 @@ import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -48,6 +54,9 @@ class VehicleApiIntegrationTest {
 
     @Autowired
     private VehicleRepository vehicleRepository;
+
+    @MockBean
+    private AuthUserLookupClient authUserLookupClient;
 
     @BeforeEach
     void setUp() {
@@ -115,6 +124,42 @@ class VehicleApiIntegrationTest {
     void unauthenticatedVehicleRequestIsRejected() throws Exception {
         mockMvc.perform(get("/vehicles"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void onlySameOrganizationBusinessAdminCanAssignDriver() throws Exception {
+        Vehicle savedVehicle = vehicleRepository.save(vehicle(101L, null, "B-101-ATL"));
+        String businessAdminToken = token("atlas.admin", 1001L, 101L, "BUSINESS_ADMIN");
+        when(authUserLookupClient.lookupUser(2001L, BEARER + businessAdminToken)).thenReturn(Optional.of(
+                new AuthUserLookupResponse(
+                        2001L,
+                        "driver",
+                        "driver@example.com",
+                        101L,
+                        "EMPLOYEE",
+                        "ACTIVE",
+                        true
+                )
+        ));
+
+        mockMvc.perform(patch("/vehicles/{id}/assignment", savedVehicle.getId())
+                        .header(HttpHeaders.AUTHORIZATION, BEARER + businessAdminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"assignedUserId": 2001}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.assignedUserId").value(2001))
+                .andExpect(jsonPath("$.assignedDriverName").value("driver"));
+
+        String superadminToken = token("superadmin", 1L, null, "SUPERADMIN");
+        mockMvc.perform(patch("/vehicles/{id}/assignment", savedVehicle.getId())
+                        .header(HttpHeaders.AUTHORIZATION, BEARER + superadminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"assignedUserId": null}
+                                """))
+                .andExpect(status().isForbidden());
     }
 
     private Vehicle vehicle(Long businessId, Long assignedUserId, String licensePlate) {

@@ -49,8 +49,6 @@ export default function VehicleForm({
     ownershipType: initial?.ownershipType ?? 'OWNED',
     status: initial?.status ?? 'ACTIVE',
     department: initial?.department ?? '',
-    assignedUserId: initial?.assignedUserId,
-    assignedDriverName: initial?.assignedDriverName ?? '',
     currentMileage: initial?.currentMileage ?? 0,
   });
 
@@ -60,8 +58,6 @@ export default function VehicleForm({
       [field]:
         field === 'manufactureYear' || field === 'currentMileage'
           ? Number(value)
-          : field === 'assignedUserId'
-          ? value === '' ? undefined : Number(value)
           : value,
     }));
   };
@@ -150,15 +146,6 @@ export default function VehicleForm({
         Department
         <input value={form.department} onChange={(e) => handleChange('department', e.target.value)} />
       </label>
-      <label>
-        Assigned Driver Name
-        <input value={form.assignedDriverName ?? ''} onChange={(e) => handleChange('assignedDriverName', e.target.value)} />
-      </label>
-      <label>
-        Assigned User ID
-        <input type="number" value={form.assignedUserId ?? ''} onChange={(e) => handleChange('assignedUserId', e.target.value)} />
-      </label>
-
       {onImageFileChange && (
         <div className="vehicle-image-field full-width">
           {currentVehicle?.imageUrl && (

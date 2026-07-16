@@ -1,5 +1,10 @@
 import api from './axios';
-import type { Vehicle, VehicleRequest, VehicleFilters } from '../types/vehicle';
+import type {
+  Vehicle,
+  VehicleAssignmentRequest,
+  VehicleRequest,
+  VehicleFilters,
+} from '../types/vehicle';
 
 export const getVehicles = (filters?: VehicleFilters) =>
   api.get<Vehicle[]>('/api/fleet/vehicles', { params: filters });
@@ -12,6 +17,9 @@ export const createVehicle = (data: VehicleRequest) =>
 
 export const updateVehicle = (id: number, data: VehicleRequest) =>
   api.put<Vehicle>(`/api/fleet/vehicles/${id}`, data);
+
+export const assignVehicleDriver = (id: number, data: VehicleAssignmentRequest) =>
+  api.patch<Vehicle>(`/api/fleet/vehicles/${id}/assignment`, data);
 
 export const uploadVehicleImage = (id: number, file: File) => {
   const formData = new FormData();

@@ -560,6 +560,9 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$[0].username").value("driver"))
                 .andExpect(jsonPath("$[0].email").value("driver@example.com"))
                 .andExpect(jsonPath("$[0].businessId").value(business.getId()))
+                .andExpect(jsonPath("$[0].role").value("EMPLOYEE"))
+                .andExpect(jsonPath("$[0].status").value("ACTIVE"))
+                .andExpect(jsonPath("$[0].enabled").value(true))
                 .andExpect(jsonPath("$[1]").doesNotExist());
 
         String employeeToken = login("driver", "password123");

@@ -54,13 +54,6 @@ public record VehicleRequest(
         @Schema(description = "Department currently responsible for the vehicle.", example = "Operations")
         String department,
 
-        @Schema(description = "Application user id assigned to the vehicle.", example = "12")
-        Long assignedUserId,
-
-        @Size(max = 160, message = "Assigned driver name must be at most 160 characters")
-        @Schema(description = "Human-readable assigned driver name.", example = "Alex Ionescu")
-        String assignedDriverName,
-
         @PositiveOrZero(message = "Current mileage must be zero or positive")
         @Schema(description = "Current odometer value.", example = "25000", minimum = "0")
         Long currentMileage

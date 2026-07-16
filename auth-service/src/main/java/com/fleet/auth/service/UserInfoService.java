@@ -727,12 +727,15 @@ public class UserInfoService implements UserDetailsService {
 
     private UserLookupResponse toUserLookupResponse(UserData userData) {
         Business business = userData.getBusiness();
+        Credential credential = userData.getCredential();
         return new UserLookupResponse(
                 userData.getUserId(),
-                userData.getCredential().getUsername(),
+                credential.getUsername(),
                 userData.getEmail(),
                 business == null ? null : business.getId(),
-                userData.getCredential().getRole().getRoleName().canonical()
+                credential.getRole().getRoleName().canonical(),
+                credential.getStatus() == null ? UserStatus.ACTIVE : credential.getStatus(),
+                !Boolean.FALSE.equals(credential.getEnabled())
         );
     }
 

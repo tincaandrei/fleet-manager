@@ -9,6 +9,7 @@ import { Button, ButtonLink } from '../components/ui/Button';
 import DataState from '../components/ui/DataState';
 import StatusBadge from '../components/ui/StatusBadge';
 import VehicleImage from '../components/VehicleImage';
+import AssignDriverModal from '../components/AssignDriverModal';
 import { getApiErrorMessage } from '../utils/apiError';
 
 const STATUSES = ['ACTIVE', 'IN_SERVICE', 'INACTIVE', 'SOLD', 'DECOMMISSIONED'];
@@ -71,7 +72,7 @@ function filterCount(draft: VehicleFilterDraft) {
 }
 
 export default function VehiclesPage() {
-  const { isAdmin, isSuperAdmin, role } = useAuth();
+  const { isAdmin, isSuperAdmin, isBusinessAdmin, role } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [filterDraft, setFilterDraft] = useState<VehicleFilterDraft>(emptyFilterDraft);
   const [appliedFilters, setAppliedFilters] = useState<VehicleFilterDraft>(emptyFilterDraft);
@@ -79,6 +80,7 @@ export default function VehiclesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [assignmentVehicle, setAssignmentVehicle] = useState<Vehicle | null>(null);
 
   const load = (draft: VehicleFilterDraft = appliedFilters) => {
     setLoading(true);
@@ -144,6 +146,12 @@ export default function VehiclesPage() {
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'Failed to delete vehicle.'));
     }
+  };
+
+  const handleDriverAssigned = (updatedVehicle: Vehicle) => {
+    setVehicles((current) => current.map((vehicle) => (
+      vehicle.id === updatedVehicle.id ? updatedVehicle : vehicle
+    )));
   };
 
   const activeCount = vehicles.filter((vehicle) => vehicle.status === 'ACTIVE').length;
@@ -370,6 +378,11 @@ export default function VehiclesPage() {
 
                       <div className="vehicle-card-actions">
                         <ButtonLink to={`/vehicles/${v.id}`} size="sm" variant="secondary">View</ButtonLink>
+                        {isBusinessAdmin && (
+                          <Button size="sm" variant="ghost" onClick={() => setAssignmentVehicle(v)}>
+                            {v.assignedUserId == null ? 'Assign driver' : 'Change driver'}
+                          </Button>
+                        )}
                         {isAdmin && (
                           <>
                             <ButtonLink to={`/vehicles/${v.id}/edit`} size="sm" variant="ghost">Edit</ButtonLink>
@@ -410,6 +423,13 @@ export default function VehiclesPage() {
             </>
           )}
         </>
+      )}
+      {isBusinessAdmin && assignmentVehicle && (
+        <AssignDriverModal
+          vehicle={assignmentVehicle}
+          onClose={() => setAssignmentVehicle(null)}
+          onAssigned={handleDriverAssigned}
+        />
       )}
     </PageShell>
   );

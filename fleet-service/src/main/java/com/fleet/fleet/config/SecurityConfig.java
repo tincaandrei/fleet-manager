@@ -43,6 +43,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/vehicles/*/image").hasAnyRole("SUPERADMIN", "BUSINESS_ADMIN")
                         .requestMatchers(HttpMethod.POST, "/vehicles/**").hasAnyRole("SUPERADMIN", "BUSINESS_ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/vehicles/**").hasAnyRole("SUPERADMIN", "BUSINESS_ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/vehicles/*/assignment").hasRole("BUSINESS_ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/vehicles/**").hasAnyRole("SUPERADMIN", "BUSINESS_ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/vehicles/**").hasAnyRole("SUPERADMIN", "BUSINESS_ADMIN")
                         .anyRequest().authenticated()

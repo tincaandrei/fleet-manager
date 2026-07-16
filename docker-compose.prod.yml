@@ -212,6 +212,7 @@ services:
       SERVER_FORWARD_HEADERS_STRATEGY: framework
       JAVA_TOOL_OPTIONS: -Xms96m -Xmx384m -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC
       JWT_SECRET: ${JWT_SECRET}
+      AUTH_SERVICE_URL: http://auth-service:8080
       VEHICLE_IMAGE_STORAGE_PATH: ${VEHICLE_IMAGE_STORAGE_PATH:-/app/vehicle-images}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
     volumes:

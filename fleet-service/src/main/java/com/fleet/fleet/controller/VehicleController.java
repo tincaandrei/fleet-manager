@@ -35,6 +35,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -60,8 +61,6 @@ public class VehicleController {
               "ownershipType": "OWNED",
               "status": "ACTIVE",
               "department": "Operations",
-              "assignedUserId": 12,
-              "assignedDriverName": "Alex Ionescu",
               "currentMileage": 25000
             }
             """;
@@ -118,9 +117,7 @@ public class VehicleController {
 
     private static final String ASSIGNMENT_REQUEST_EXAMPLE = """
             {
-              "assignedUserId": 12,
-              "assignedDriverName": "Alex Ionescu",
-              "department": "Operations"
+              "assignedUserId": 12
             }
             """;
 
@@ -265,7 +262,7 @@ public class VehicleController {
     @PatchMapping("/vehicles/{id}/assignment")
     @Operation(
             summary = "Assign vehicle",
-            description = "Updates the user, driver name, and department assignment for a vehicle. Requires `ADMIN` or `FLEET_MANAGER`."
+            description = "Assigns an active employee from the vehicle organization, or clears the current driver. Requires same-organization `BUSINESS_ADMIN`."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Vehicle assignment changed", content = @Content(schema = @Schema(implementation = VehicleResponse.class), examples = @ExampleObject(value = VEHICLE_RESPONSE_EXAMPLE))),
@@ -282,9 +279,10 @@ public class VehicleController {
                     content = @Content(schema = @Schema(implementation = VehicleAssignmentRequest.class), examples = @ExampleObject(value = ASSIGNMENT_REQUEST_EXAMPLE))
             )
             @Valid @RequestBody VehicleAssignmentRequest request,
-            Authentication authentication
+            Authentication authentication,
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader
     ) {
-        return ResponseEntity.ok(vehicleService.assign(id, request, authentication));
+        return ResponseEntity.ok(vehicleService.assign(id, request, authentication, authorizationHeader));
     }
 
     @PostMapping(path = "/vehicles/{id}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

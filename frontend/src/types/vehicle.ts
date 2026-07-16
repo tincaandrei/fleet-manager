@@ -16,14 +16,14 @@ export interface VehicleRequest {
   ownershipType: OwnershipType;
   status: VehicleStatus;
   department: string;
-  assignedUserId?: number;
-  assignedDriverName?: string;
   currentMileage: number;
 }
 
 export interface Vehicle extends Omit<VehicleRequest, 'businessId'> {
   id: number;
   businessId: number | null;
+  assignedUserId: number | null;
+  assignedDriverName: string | null;
   imageUrl: string | null;
   imageOriginalFileName: string | null;
   createdAt: string;
@@ -39,4 +39,8 @@ export interface VehicleFilters {
   assignedUserId?: number;
   licensePlate?: string;
   businessId?: number;
+}
+
+export interface VehicleAssignmentRequest {
+  assignedUserId: number | null;
 }

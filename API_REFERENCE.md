@@ -168,8 +168,6 @@ Request:
   "fuelType": "HYBRID",
   "ownershipType": "OWNED",
   "department": "Operations",
-  "assignedUserId": 12,
-  "assignedDriverName": "Alex Ionescu",
   "currentMileage": 25000
 }
 ```
@@ -221,11 +219,11 @@ Content-Type: application/json
 
 ```json
 {
-  "assignedUserId": 12,
-  "assignedDriverName": "Alex Ionescu",
-  "department": "Operations"
+  "assignedUserId": 12
 }
 ```
+
+Only a `BUSINESS_ADMIN` from the vehicle organization can assign a driver. The selected user must be an active `EMPLOYEE` in the same organization. Send `null` to clear the driver.
 
 ### Delete Vehicle
 ```http
