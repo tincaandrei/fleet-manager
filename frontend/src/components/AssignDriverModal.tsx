@@ -4,6 +4,7 @@ import { assignVehicleDriver } from '../api/vehicleApi';
 import type { BusinessUser } from '../types/auth';
 import type { Vehicle } from '../types/vehicle';
 import { getApiErrorMessage } from '../utils/apiError';
+import { businessUserDisplayName } from '../utils/businessUserDisplay';
 import { showToast } from '../utils/toast';
 import { Button } from './ui/Button';
 
@@ -11,11 +12,6 @@ interface AssignDriverModalProps {
   vehicle: Vehicle;
   onClose: () => void;
   onAssigned: (vehicle: Vehicle) => void;
-}
-
-function driverLabel(user: BusinessUser) {
-  const username = user.username?.trim();
-  return username || user.email;
 }
 
 export default function AssignDriverModal({ vehicle, onClose, onAssigned }: AssignDriverModalProps) {
@@ -78,12 +74,14 @@ export default function AssignDriverModal({ vehicle, onClose, onAssigned }: Assi
     try {
       const response = await assignVehicleDriver(vehicle.id, {
         assignedUserId: selectedDriver?.userId ?? null,
+        assignedDriverName: selectedDriver ? businessUserDisplayName(selectedDriver) : null,
+        department: vehicle.department?.trim() || null,
       });
       onAssigned(response.data);
       showToast({
         type: 'success',
         message: selectedDriver
-          ? `${driverLabel(selectedDriver)} assigned to ${vehicle.licensePlate}.`
+          ? `${businessUserDisplayName(selectedDriver)} assigned to ${vehicle.licensePlate}.`
           : `Driver removed from ${vehicle.licensePlate}.`,
       });
       onClose();
@@ -148,7 +146,7 @@ export default function AssignDriverModal({ vehicle, onClose, onAssigned }: Assi
             )}
             {drivers.map((driver) => (
               <option key={driver.userId} value={driver.userId}>
-                {driverLabel(driver)}{driver.username ? ` — ${driver.email}` : ''}
+                {businessUserDisplayName(driver)}{driver.username ? ` — ${driver.email}` : ''}
               </option>
             ))}
           </select>

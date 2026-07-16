@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { deleteVehicle, deleteVehicleImage, getVehicle, uploadVehicleImage } from '../api/vehicleApi';
 import type { Vehicle } from '../types/vehicle';
 import { useAuth } from '../auth/useAuth';
+import { useBusinessDriverNames } from '../auth/useBusinessDriverNames';
 import VehicleDocumentsSection from '../components/VehicleDocumentsSection';
 import ComplianceSection from '../components/ComplianceSection';
 import VehicleImage from '../components/VehicleImage';
@@ -12,13 +13,14 @@ import DataState from '../components/ui/DataState';
 import StatusBadge from '../components/ui/StatusBadge';
 import { Button } from '../components/ui/Button';
 import { getApiErrorMessage } from '../utils/apiError';
+import { assignedDriverDisplayName } from '../utils/businessUserDisplay';
 import { showToast } from '../utils/toast';
 
 type Tab = 'details' | 'documents' | 'compliance';
 
 export default function VehicleDetailsPage() {
   const { id } = useParams<{ id: string }>();
-  const { isAdmin, isBusinessAdmin } = useAuth();
+  const { isAdmin, isBusinessAdmin, businessId } = useAuth();
   const navigate = useNavigate();
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,6 +31,8 @@ export default function VehicleDetailsPage() {
   const [isImageOpen, setIsImageOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('details');
   const [isAssignmentOpen, setIsAssignmentOpen] = useState(false);
+  const driverNames = useBusinessDriverNames(businessId, isBusinessAdmin);
+  const driverName = vehicle ? assignedDriverDisplayName(vehicle, driverNames) : '-';
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -149,7 +153,7 @@ export default function VehicleDetailsPage() {
               </div>
               <aside className="detail-aside">
                 <div className="detail-aside-row"><span>Department</span><strong>{vehicle.department || '-'}</strong></div>
-                <div className="detail-aside-row"><span>Driver</span><strong>{vehicle.assignedDriverName || '-'}</strong></div>
+                <div className="detail-aside-row"><span>Driver</span><strong>{driverName || '-'}</strong></div>
                 <div className="detail-aside-row"><span>Organization</span><strong>{vehicle.businessId ?? '-'}</strong></div>
               </aside>
             </section>
@@ -189,7 +193,7 @@ export default function VehicleDetailsPage() {
                   <tr><th>Ownership</th><td>{vehicle.ownershipType}</td></tr>
                   <tr><th>Status</th><td><StatusBadge status={vehicle.status} /></td></tr>
                   <tr><th>Department</th><td>{vehicle.department}</td></tr>
-                  <tr><th>Assigned Driver</th><td>{vehicle.assignedDriverName || '—'}</td></tr>
+                  <tr><th>Assigned Driver</th><td>{driverName || '—'}</td></tr>
                   <tr><th>Mileage</th><td>{vehicle.currentMileage.toLocaleString()} km</td></tr>
                   {vehicle.businessId != null && (
                     <tr><th>Organization ID</th><td>{vehicle.businessId}</td></tr>

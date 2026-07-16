@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { deleteVehicle, getVehicles } from '../api/vehicleApi';
 import type { Vehicle, VehicleFilters } from '../types/vehicle';
 import { useAuth } from '../auth/useAuth';
+import { useBusinessDriverNames } from '../auth/useBusinessDriverNames';
 import PageShell from '../components/ui/PageShell';
 import PageHeader from '../components/ui/PageHeader';
 import { Button, ButtonLink } from '../components/ui/Button';
@@ -11,6 +12,7 @@ import StatusBadge from '../components/ui/StatusBadge';
 import VehicleImage from '../components/VehicleImage';
 import AssignDriverModal from '../components/AssignDriverModal';
 import { getApiErrorMessage } from '../utils/apiError';
+import { assignedDriverDisplayName } from '../utils/businessUserDisplay';
 
 const STATUSES = ['ACTIVE', 'IN_SERVICE', 'INACTIVE', 'SOLD', 'DECOMMISSIONED'];
 const TYPES = ['CAR', 'VAN', 'TRUCK', 'MOTORCYCLE', 'OTHER'];
@@ -72,7 +74,7 @@ function filterCount(draft: VehicleFilterDraft) {
 }
 
 export default function VehiclesPage() {
-  const { isAdmin, isSuperAdmin, isBusinessAdmin, role } = useAuth();
+  const { isAdmin, isSuperAdmin, isBusinessAdmin, role, businessId } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [filterDraft, setFilterDraft] = useState<VehicleFilterDraft>(emptyFilterDraft);
   const [appliedFilters, setAppliedFilters] = useState<VehicleFilterDraft>(emptyFilterDraft);
@@ -81,6 +83,7 @@ export default function VehiclesPage() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [assignmentVehicle, setAssignmentVehicle] = useState<Vehicle | null>(null);
+  const driverNames = useBusinessDriverNames(businessId, isBusinessAdmin);
 
   const load = (draft: VehicleFilterDraft = appliedFilters) => {
     setLoading(true);
@@ -366,7 +369,7 @@ export default function VehiclesPage() {
                         </div>
                         <div>
                           <dt>Driver</dt>
-                          <dd>{v.assignedDriverName || '-'}</dd>
+                          <dd>{assignedDriverDisplayName(v, driverNames)}</dd>
                         </div>
                         {isSuperAdmin && (
                           <div>

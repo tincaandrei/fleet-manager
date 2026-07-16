@@ -146,11 +146,16 @@ class VehicleApiIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, BEARER + businessAdminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"assignedUserId": 2001}
+                                {
+                                  "assignedUserId": 2001,
+                                  "assignedDriverName": "spoofed name",
+                                  "department": "spoofed department"
+                                }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.assignedUserId").value(2001))
-                .andExpect(jsonPath("$.assignedDriverName").value("driver"));
+                .andExpect(jsonPath("$.assignedDriverName").value("driver"))
+                .andExpect(jsonPath("$.department").value("Operations"));
 
         String superadminToken = token("superadmin", 1L, null, "SUPERADMIN");
         mockMvc.perform(patch("/vehicles/{id}/assignment", savedVehicle.getId())
@@ -174,6 +179,7 @@ class VehicleApiIntegrationTest {
                 .fuelType(FuelType.PETROL)
                 .ownershipType(OwnershipType.OWNED)
                 .status(VehicleStatus.ACTIVE)
+                .department("Operations")
                 .assignedUserId(assignedUserId)
                 .currentMileage(10_000L)
                 .build();

@@ -43,4 +43,8 @@ export interface VehicleFilters {
 
 export interface VehicleAssignmentRequest {
   assignedUserId: number | null;
+  /** Sent for compatibility with older fleet-service deployments. */
+  assignedDriverName?: string | null;
+  /** Sent so older fleet-service deployments preserve the department. */
+  department?: string | null;
 }

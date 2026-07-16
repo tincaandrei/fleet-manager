@@ -68,7 +68,6 @@ services:
       SPRING_DATASOURCE_USERNAME: ${AUTH_DB_USER:-auth_user}
       SPRING_DATASOURCE_PASSWORD: ${AUTH_DB_PASSWORD:?Set AUTH_DB_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
-      AUTH_SERVICE_URL: http://auth-service:8080
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?Set BOOTSTRAP_ADMIN_PASSWORD in .env}
@@ -132,6 +131,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${FLEET_DB_USER:-fleet_user}
       SPRING_DATASOURCE_PASSWORD: ${FLEET_DB_PASSWORD:?Set FLEET_DB_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      AUTH_SERVICE_URL: http://auth-service:8080
     volumes:
       - fleet-vehicle-image-data:/app/vehicle-images
     networks:
